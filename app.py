@@ -21,6 +21,11 @@ DEFAULT_LANGUAGE = "Japanese"
 DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
 DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
+DEFAULT_GENERATION_KWARGS = {
+    "do_sample": False,
+    "subtalker_dosample": False,
+    "repetition_penalty": 1.05,
+}
 
 
 @dataclass
@@ -220,6 +225,7 @@ def generate_voice_clone(
         ref_audio=resolved_reference_audio,
         ref_text=reference_text.strip(),
         non_streaming_mode=True,
+        **DEFAULT_GENERATION_KWARGS,
     )
     output_path = save_output_audio(wavs[0], sample_rate)
     message = (
@@ -283,7 +289,7 @@ def build_app() -> gr.Blocks:
                     <li>その音声の文字起こしを正確に入力する</li>
                     <li>読ませたい文章を入れて生成する</li>
                   </ol>
-                  <p class="tip">本人の声、または明確な許可がある声だけを使ってください。なりすましや迷惑行為への利用は避けてください。</p>
+                  <p class="tip">このアプリは話者をなるべく寄せますが、完全に同一の声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</p>
                 </section>
                 """
             )
@@ -364,6 +370,8 @@ def build_app() -> gr.Blocks:
                 - 動画を入れた場合は、音声を自動で取り出して参照音声に変換します。
                 - 先に「参照素材を整える」を押すと、切り出し結果を確認できます。
                 - 声が不安定なときは、雑音の少ない3秒以上の音声を使ってください。精度を上げたいなら30秒前後も有効です。
+                - 参照音声と参照テキストが少しでもズレると、別人っぽい声になりやすいです。
+                - このアプリは話者の安定性を優先するため、ランダム性をかなり下げています。
                 - 参照テキストは、省略せずに実際の音声どおり入力してください。
                 - 最初は短い文で試すと成功しやすいです。
                 """
