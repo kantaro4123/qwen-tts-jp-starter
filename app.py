@@ -19,6 +19,7 @@ from qwen_tts import Qwen3TTSModel
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
+DEFAULT_LANGUAGE_LABEL = "日本語"
 LOCAL_ASR_MODEL = os.environ.get("QWEN_TTS_LOCAL_ASR_MODEL", "small")
 SETTINGS_PATH = Path("config/settings.json")
 QWEN_TTS_MODEL_CHOICES = {
@@ -26,19 +27,20 @@ QWEN_TTS_MODEL_CHOICES = {
     "軽量 0.6B": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
 }
 LOCAL_ASR_MODEL_CHOICES = ["base", "small", "medium"]
-SUPPORTED_LANGUAGES = [
-    "Auto",
-    "Chinese",
-    "English",
-    "German",
-    "Italian",
-    "Portuguese",
-    "Spanish",
-    "Japanese",
-    "Korean",
-    "French",
-    "Russian",
-]
+LANGUAGE_LABEL_TO_VALUE = {
+    "自動判定": "Auto",
+    "中国語": "Chinese",
+    "英語": "English",
+    "ドイツ語": "German",
+    "イタリア語": "Italian",
+    "ポルトガル語": "Portuguese",
+    "スペイン語": "Spanish",
+    "日本語": "Japanese",
+    "韓国語": "Korean",
+    "フランス語": "French",
+    "ロシア語": "Russian",
+}
+SUPPORTED_LANGUAGES = list(LANGUAGE_LABEL_TO_VALUE.keys())
 DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
 DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
@@ -47,17 +49,17 @@ TARGET_REFERENCE_SAMPLE_RATE = 24000
 TARGET_REFERENCE_DBFS = -20.0
 TRANSCRIBE_BACKENDS = ["自動選択", "ローカル faster-whisper"]
 TRANSCRIBE_LANGUAGE_HINTS = {
-    "Auto": "",
-    "Chinese": "zh",
-    "English": "en",
-    "German": "de",
-    "Italian": "it",
-    "Portuguese": "pt",
-    "Spanish": "es",
-    "Japanese": "ja",
-    "Korean": "ko",
-    "French": "fr",
-    "Russian": "ru",
+    "自動判定": "",
+    "中国語": "zh",
+    "英語": "en",
+    "ドイツ語": "de",
+    "イタリア語": "it",
+    "ポルトガル語": "pt",
+    "スペイン語": "es",
+    "日本語": "ja",
+    "韓国語": "ko",
+    "フランス語": "fr",
+    "ロシア語": "ru",
 }
 
 
@@ -433,7 +435,7 @@ def generate_voice_clone(
     model = load_model()
     wavs, sample_rate = model.generate_voice_clone(
         text=target_text.strip(),
-        language=target_language or DEFAULT_LANGUAGE,
+        language=LANGUAGE_LABEL_TO_VALUE.get(target_language, DEFAULT_LANGUAGE),
         ref_audio=resolved_reference_audio,
         ref_text=reference_text.strip(),
         non_streaming_mode=True,
@@ -733,7 +735,7 @@ def build_app() -> gr.Blocks:
                     target_language = gr.Dropdown(
                         label="読み上げ言語",
                         choices=SUPPORTED_LANGUAGES,
-                        value=DEFAULT_LANGUAGE,
+                        value=DEFAULT_LANGUAGE_LABEL,
                         interactive=True,
                     )
                     fill_target_text_button = gr.Button(
