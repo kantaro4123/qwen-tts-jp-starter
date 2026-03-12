@@ -1,0 +1,3 @@
+qwen-tts==0.1.1
+gradio==6.6.0
+soundfile==0.13.1
