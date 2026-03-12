@@ -184,6 +184,7 @@ cd qwen-tts-jp-starter
 終わるときは、起動したターミナルで `Ctrl + C` を押してください。
 
 `.app` ランチャーを使う場合は、`起動 / 初回セットアップ / 更新` を選べます。
+初回セットアップでは、最初に使う `Qwen-TTS` モデルとローカルASRモデルも選べます。
 
 ## 使い方
 
@@ -303,6 +304,15 @@ ffmpeg -version
 - API キーがない場合でも、アプリ本体の音声生成はそのまま使えます
 - ローカルで使いたい場合は `./install_local_asr.command` を実行すると `faster-whisper` を追加できます
 - アプリ内では `自動選択 / OpenAI API / ローカル faster-whisper` を切り替えられます
+- ローカル faster-whisper のモデルサイズは、あとからアプリ内の `設定` で `base / small / medium` を切り替えられます
+
+## モデル設定について
+
+- `Qwen-TTS` は `高精度 1.7B / 軽量 0.6B` を選べます
+- `faster-whisper` は `base / small / medium` を選べます
+- 初回セットアップ時に選べます
+- あとからアプリ内の `設定` でも変更できます
+- `Qwen-TTS` を変更した場合は、次の生成から反映されます
 
 ## オープンソースASR候補
 

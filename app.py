@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
 import tempfile
@@ -20,6 +21,12 @@ DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
 TRANSCRIBE_CLI = Path(os.environ.get("TRANSCRIBE_CLI", str(Path.home() / ".codex/skills/transcribe/scripts/transcribe_diarize.py")))
 LOCAL_ASR_MODEL = os.environ.get("QWEN_TTS_LOCAL_ASR_MODEL", "small")
+SETTINGS_PATH = Path("config/settings.json")
+QWEN_TTS_MODEL_CHOICES = {
+    "高精度 1.7B": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+    "軽量 0.6B": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+}
+LOCAL_ASR_MODEL_CHOICES = ["base", "small", "medium"]
 SUPPORTED_LANGUAGES = [
     "Auto",
     "Chinese",
@@ -57,14 +64,49 @@ TRANSCRIBE_LANGUAGE_HINTS = {
 
 @dataclass
 class AppConfig:
-    model_id: str = os.environ.get("QWEN_TTS_MODEL_ID", DEFAULT_MODEL_ID)
+    model_id: str = DEFAULT_MODEL_ID
     host: str = os.environ.get("QWEN_TTS_HOST", "127.0.0.1")
     port: int = int(os.environ.get("QWEN_TTS_PORT", "7860"))
     output_dir: Path = Path(os.environ.get("QWEN_TTS_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR)))
+    local_asr_model: str = LOCAL_ASR_MODEL
 
 
 APP_CONFIG = AppConfig()
 _MODEL: Optional[Qwen3TTSModel] = None
+
+
+def ensure_settings_dir() -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+
+def load_settings() -> dict:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_settings(settings: dict) -> None:
+    ensure_settings_dir()
+    SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def apply_settings() -> None:
+    settings = load_settings()
+    APP_CONFIG.model_id = settings.get("qwen_tts_model_id", os.environ.get("QWEN_TTS_MODEL_ID", DEFAULT_MODEL_ID))
+    APP_CONFIG.local_asr_model = settings.get("local_asr_model", os.environ.get("QWEN_TTS_LOCAL_ASR_MODEL", LOCAL_ASR_MODEL))
+
+
+def current_qwen_label() -> str:
+    for label, model_id in QWEN_TTS_MODEL_CHOICES.items():
+        if model_id == APP_CONFIG.model_id:
+            return label
+    return "高精度 1.7B"
+
+
+apply_settings()
 
 
 def detect_device() -> str:
@@ -349,7 +391,7 @@ def transcribe_reference_audio(
                 "",
             )
         compute_type = "int8"
-        model = WhisperModel(LOCAL_ASR_MODEL, device="cpu", compute_type=compute_type)
+        model = WhisperModel(APP_CONFIG.local_asr_model, device="cpu", compute_type=compute_type)
         segments, _info = model.transcribe(
             resolved_reference_audio,
             language=(language_hint or None),
@@ -357,7 +399,7 @@ def transcribe_reference_audio(
             condition_on_previous_text=False,
         )
         transcript = "".join(segment.text for segment in segments).strip()
-        backend_status = f"ローカル faster-whisper ({LOCAL_ASR_MODEL})"
+        backend_status = f"ローカル faster-whisper ({APP_CONFIG.local_asr_model})"
 
     if not transcript:
         return (
@@ -432,6 +474,26 @@ def open_output_folder() -> str:
     DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     subprocess.run(["open", str(DEFAULT_OUTPUT_DIR.resolve())], check=False)
     return f"出力フォルダを開きました: {DEFAULT_OUTPUT_DIR.resolve()}"
+
+
+def save_model_settings(qwen_model_label: str, local_asr_model: str) -> str:
+    global _MODEL
+    model_id = QWEN_TTS_MODEL_CHOICES.get(qwen_model_label, DEFAULT_MODEL_ID)
+    current_model_id = APP_CONFIG.model_id
+    settings = load_settings()
+    settings["qwen_tts_model_id"] = model_id
+    settings["local_asr_model"] = local_asr_model
+    save_settings(settings)
+    APP_CONFIG.model_id = model_id
+    APP_CONFIG.local_asr_model = local_asr_model
+    if current_model_id != model_id:
+        _MODEL = None
+    return (
+        "設定を保存しました。"
+        f" Qwen-TTS: {qwen_model_label}"
+        f" / ローカルASR: {local_asr_model}"
+        " / Qwen-TTS の変更は次の生成時から反映されます。"
+    )
 
 
 CSS = """
@@ -555,6 +617,26 @@ def build_app() -> gr.Blocks:
                 label="5. 生成結果",
                 interactive=False,
             )
+
+            with gr.Accordion("設定", open=False):
+                qwen_model_setting = gr.Dropdown(
+                    label="Qwen-TTS モデル",
+                    choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
+                    value=current_qwen_label(),
+                    interactive=True,
+                )
+                local_asr_setting = gr.Dropdown(
+                    label="ローカル faster-whisper モデル",
+                    choices=LOCAL_ASR_MODEL_CHOICES,
+                    value=APP_CONFIG.local_asr_model,
+                    interactive=True,
+                )
+                save_settings_button = gr.Button("設定を保存")
+                save_settings_button.click(
+                    fn=save_model_settings,
+                    inputs=[qwen_model_setting, local_asr_setting],
+                    outputs=[status],
+                )
 
             prepare_button = gr.Button("参照素材を整える")
             generate_button = gr.Button("音声生成", variant="primary")

@@ -7,3 +7,4 @@ outputs/
 .gradio/
 build/
 dist/
+config/settings.json
