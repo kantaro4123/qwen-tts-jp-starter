@@ -19,6 +19,7 @@ from qwen_tts import Qwen3TTSModel
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
 TRANSCRIBE_CLI = Path(os.environ.get("TRANSCRIBE_CLI", str(Path.home() / ".codex/skills/transcribe/scripts/transcribe_diarize.py")))
+LOCAL_ASR_MODEL = os.environ.get("QWEN_TTS_LOCAL_ASR_MODEL", "small")
 SUPPORTED_LANGUAGES = [
     "Auto",
     "Chinese",
@@ -38,6 +39,7 @@ DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
 DEFAULT_GENERATION_KWARGS = {}
 TARGET_REFERENCE_SAMPLE_RATE = 24000
 TARGET_REFERENCE_DBFS = -20.0
+TRANSCRIBE_BACKENDS = ["自動選択", "OpenAI API", "ローカル faster-whisper"]
 TRANSCRIBE_LANGUAGE_HINTS = {
     "Auto": "",
     "Chinese": "zh",
@@ -271,26 +273,12 @@ def transcribe_reference_audio(
     reference_video: Optional[str],
     prepared_reference_audio: Optional[str],
     target_language: str,
+    transcription_backend_selector: str,
     trim_start_sec: float,
     trim_end_sec: float,
     auto_trim_silence: bool,
 ) -> tuple[str, Optional[str], Optional[str], str]:
-    if not os.environ.get("OPENAI_API_KEY"):
-        return (
-            "自動文字起こしには `OPENAI_API_KEY` が必要です。環境変数を設定してからもう一度試してください。",
-            prepared_reference_audio,
-            prepared_reference_audio,
-            "",
-        )
-
-    if not TRANSCRIBE_CLI.exists():
-        return (
-            f"文字起こしスクリプトが見つかりませんでした: {TRANSCRIBE_CLI}",
-            prepared_reference_audio,
-            prepared_reference_audio,
-            "",
-        )
-
+    backend_status = ""
     resolved_reference_audio = prepared_reference_audio
     status_prefix = "整えた参照音声をそのまま使いました。"
     if not resolved_reference_audio:
@@ -305,29 +293,72 @@ def transcribe_reference_audio(
         except Exception as exc:
             return f"参照素材の準備に失敗しました: {exc}", None, None, ""
 
-    cmd = [
-        "python3",
-        str(TRANSCRIBE_CLI),
-        resolved_reference_audio,
-        "--response-format",
-        "text",
-        "--stdout",
-    ]
+    backend_label = transcription_backend_selector
+    if backend_label == "自動選択":
+        if os.environ.get("OPENAI_API_KEY") and TRANSCRIBE_CLI.exists():
+            backend_label = "OpenAI API"
+        else:
+            backend_label = "ローカル faster-whisper"
+
     language_hint = TRANSCRIBE_LANGUAGE_HINTS.get(target_language, "")
-    if language_hint:
-        cmd.extend(["--language", language_hint])
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        error_text = (result.stderr or result.stdout or "unknown error").strip()
-        return (
-            f"自動文字起こしに失敗しました: {error_text}",
+    if backend_label == "OpenAI API":
+        if not os.environ.get("OPENAI_API_KEY"):
+            return (
+                "OpenAI API での自動文字起こしには `OPENAI_API_KEY` が必要です。",
+                resolved_reference_audio,
+                resolved_reference_audio,
+                "",
+            )
+        if not TRANSCRIBE_CLI.exists():
+            return (
+                f"文字起こしスクリプトが見つかりませんでした: {TRANSCRIBE_CLI}",
+                resolved_reference_audio,
+                resolved_reference_audio,
+                "",
+            )
+        cmd = [
+            "python3",
+            str(TRANSCRIBE_CLI),
             resolved_reference_audio,
+            "--response-format",
+            "text",
+            "--stdout",
+        ]
+        if language_hint:
+            cmd.extend(["--language", language_hint])
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            error_text = (result.stderr or result.stdout or "unknown error").strip()
+            return (
+                f"自動文字起こしに失敗しました: {error_text}",
+                resolved_reference_audio,
+                resolved_reference_audio,
+                "",
+            )
+        transcript = result.stdout.strip()
+        backend_status = "OpenAI API"
+    else:
+        try:
+            from faster_whisper import WhisperModel
+        except Exception:
+            return (
+                "ローカル faster-whisper が未インストールです。`./install_local_asr.command` を実行してください。",
+                resolved_reference_audio,
+                resolved_reference_audio,
+                "",
+            )
+        compute_type = "int8"
+        model = WhisperModel(LOCAL_ASR_MODEL, device="cpu", compute_type=compute_type)
+        segments, _info = model.transcribe(
             resolved_reference_audio,
-            "",
+            language=(language_hint or None),
+            vad_filter=True,
+            condition_on_previous_text=False,
         )
+        transcript = "".join(segment.text for segment in segments).strip()
+        backend_status = f"ローカル faster-whisper ({LOCAL_ASR_MODEL})"
 
-    transcript = result.stdout.strip()
     if not transcript:
         return (
             "自動文字起こしの結果が空でした。別の素材か手入力で試してください。",
@@ -337,7 +368,7 @@ def transcribe_reference_audio(
         )
 
     return (
-        f"{status_prefix}\n自動文字起こしが完了しました。内容を確認して、必要なら少し修正してください。",
+        f"{status_prefix}\n自動文字起こしが完了しました。方式: {backend_status}\n内容を確認して、必要なら少し修正してください。",
         resolved_reference_audio,
         resolved_reference_audio,
         transcript,
@@ -508,6 +539,12 @@ def build_app() -> gr.Blocks:
                 value=DEFAULT_LANGUAGE,
                 interactive=True,
             )
+            transcription_backend = gr.Dropdown(
+                label="参照音声の文字起こし方式",
+                choices=TRANSCRIBE_BACKENDS,
+                value="自動選択",
+                interactive=True,
+            )
 
             status = gr.Markdown(
                 "先に「参照素材を整える」で切り出し結果を確認できます。初回の音声生成はモデルの読み込みに少し時間がかかります。"
@@ -535,6 +572,7 @@ def build_app() -> gr.Blocks:
                     reference_video,
                     prepared_reference_state,
                     target_language,
+                    transcription_backend,
                     trim_start_sec,
                     trim_end_sec,
                     auto_trim_silence,
