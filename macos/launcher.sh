@@ -12,8 +12,11 @@ fi
 cd "$PROJECT_DIR"
 
 if [ ! -d ".venv" ]; then
+  osascript -e 'display dialog "初回セットアップを始めます。数分かかることがあります。" buttons {"OK"} default button "OK"' || true
   echo "初回セットアップを始めます..."
   ./setup.command
+  osascript -e 'display notification "初回セットアップが終わりました。" with title "かんたんボイスクローン"' || true
 fi
 
+osascript -e 'display notification "アプリを起動します。ブラウザが開くまで少し待ってください。" with title "かんたんボイスクローン"' || true
 ./run.command

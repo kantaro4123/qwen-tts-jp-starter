@@ -18,6 +18,7 @@ from qwen_tts import Qwen3TTSModel
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
+TRANSCRIBE_CLI = Path(os.environ.get("TRANSCRIBE_CLI", str(Path.home() / ".codex/skills/transcribe/scripts/transcribe_diarize.py")))
 SUPPORTED_LANGUAGES = [
     "Auto",
     "Chinese",
@@ -37,6 +38,19 @@ DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
 DEFAULT_GENERATION_KWARGS = {}
 TARGET_REFERENCE_SAMPLE_RATE = 24000
 TARGET_REFERENCE_DBFS = -20.0
+TRANSCRIBE_LANGUAGE_HINTS = {
+    "Auto": "",
+    "Chinese": "zh",
+    "English": "en",
+    "German": "de",
+    "Italian": "it",
+    "Portuguese": "pt",
+    "Spanish": "es",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "French": "fr",
+    "Russian": "ru",
+}
 
 
 @dataclass
@@ -252,6 +266,84 @@ def prepare_reference_audio(
     return status, output_path, output_path
 
 
+def transcribe_reference_audio(
+    reference_audio: Optional[str],
+    reference_video: Optional[str],
+    prepared_reference_audio: Optional[str],
+    target_language: str,
+    trim_start_sec: float,
+    trim_end_sec: float,
+    auto_trim_silence: bool,
+) -> tuple[str, Optional[str], Optional[str], str]:
+    if not os.environ.get("OPENAI_API_KEY"):
+        return (
+            "自動文字起こしには `OPENAI_API_KEY` が必要です。環境変数を設定してからもう一度試してください。",
+            prepared_reference_audio,
+            prepared_reference_audio,
+            "",
+        )
+
+    if not TRANSCRIBE_CLI.exists():
+        return (
+            f"文字起こしスクリプトが見つかりませんでした: {TRANSCRIBE_CLI}",
+            prepared_reference_audio,
+            prepared_reference_audio,
+            "",
+        )
+
+    resolved_reference_audio = prepared_reference_audio
+    status_prefix = "整えた参照音声をそのまま使いました。"
+    if not resolved_reference_audio:
+        try:
+            status_prefix, resolved_reference_audio = build_reference_audio(
+                reference_audio=reference_audio,
+                reference_video=reference_video,
+                trim_start_sec=trim_start_sec,
+                trim_end_sec=trim_end_sec,
+                auto_trim_silence=auto_trim_silence,
+            )
+        except Exception as exc:
+            return f"参照素材の準備に失敗しました: {exc}", None, None, ""
+
+    cmd = [
+        "python3",
+        str(TRANSCRIBE_CLI),
+        resolved_reference_audio,
+        "--response-format",
+        "text",
+        "--stdout",
+    ]
+    language_hint = TRANSCRIBE_LANGUAGE_HINTS.get(target_language, "")
+    if language_hint:
+        cmd.extend(["--language", language_hint])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        error_text = (result.stderr or result.stdout or "unknown error").strip()
+        return (
+            f"自動文字起こしに失敗しました: {error_text}",
+            resolved_reference_audio,
+            resolved_reference_audio,
+            "",
+        )
+
+    transcript = result.stdout.strip()
+    if not transcript:
+        return (
+            "自動文字起こしの結果が空でした。別の素材か手入力で試してください。",
+            resolved_reference_audio,
+            resolved_reference_audio,
+            "",
+        )
+
+    return (
+        f"{status_prefix}\n自動文字起こしが完了しました。内容を確認して、必要なら少し修正してください。",
+        resolved_reference_audio,
+        resolved_reference_audio,
+        transcript,
+    )
+
+
 def generate_voice_clone(
     reference_audio: Optional[str],
     reference_video: Optional[str],
@@ -402,6 +494,7 @@ def build_app() -> gr.Blocks:
                 lines=3,
             )
             fill_reference_text_button = gr.Button("参照テキストの例文を入れる")
+            transcribe_reference_button = gr.Button("参照音声を自動文字起こし")
 
             target_text = gr.Textbox(
                 label="3. 読ませたい文章",
@@ -435,6 +528,19 @@ def build_app() -> gr.Blocks:
                 outputs=[status, prepared_reference_audio, prepared_reference_state],
             )
             fill_reference_text_button.click(fn=fill_reference_text_example, outputs=[reference_text])
+            transcribe_reference_button.click(
+                fn=transcribe_reference_audio,
+                inputs=[
+                    reference_audio,
+                    reference_video,
+                    prepared_reference_state,
+                    target_language,
+                    trim_start_sec,
+                    trim_end_sec,
+                    auto_trim_silence,
+                ],
+                outputs=[status, prepared_reference_audio, prepared_reference_state, reference_text],
+            )
             fill_target_text_button.click(fn=fill_target_text_example, outputs=[target_text])
             generate_button.click(
                 fn=generate_voice_clone,
