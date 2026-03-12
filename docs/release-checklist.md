@@ -1,21 +1,22 @@
 # Release Checklist
 
-初心者向けの DMG を公開するときの最小チェックです。
+初心者向けのアプリ配布物を公開するときの最小チェックです。
 
 ## 標準方針
 
 - 標準モデルは `Qwen/Qwen3-TTS-12Hz-1.7B-Base`
+- 標準配布物は `ZIP` 版アプリにする
 - Apple Developer 未加入でも配布可能
-- 初回起動時の警告は README と `はじめに.txt` で案内する
+- 初回起動時の警告は README で案内する
 
 ## 事前確認
 
-1. `README.md` の冒頭リンクが最新 Release 直リンクになっている
+1. `README.md` の冒頭リンクが最新 `ZIP` Release 直リンクになっている
 2. `docs/releases/<version>.md` を作成済み
-3. `はじめに.txt` の案内が最新の配布手順に合っている
-4. 先に `./setup.command` を実行して `.venv` を作成済み
-5. `swiftc -typecheck` が通る
-6. `zsh -n` と `py_compile` が通る
+3. 先に `./setup.command` を実行して `.venv` を作成済み
+4. `swiftc -typecheck` が通る
+5. `zsh -n` と `py_compile` が通る
+6. `build_zip.sh` と `build_dmg.sh` が両方通る
 
 ## 標準の 1.7B 同梱版を作る
 
@@ -35,7 +36,8 @@ git push origin v0.x.y --force
 
 - 署名なし / 公証なしのままで公開してよい
 - その代わり、初回起動時に `右クリック > 開く` が必要になることがある
-- その案内を README と `はじめに.txt` に残しておく
+- できるだけ `ZIP` 版を正面に出す
+- その案内を README に残しておく
 
 ## Apple Developer がある場合
 

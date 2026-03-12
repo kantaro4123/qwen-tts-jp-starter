@@ -369,7 +369,7 @@ def transcribe_reference_audio(
     except Exception:
         return (
             "ローカル文字起こし（faster-whisper）は別途インストールが必要です。\n"
-            "DMG版: アプリ内「音声認識を追加（任意）」ボタンを押してください。\n"
+            "アプリ版: 設定画面の「文字起こしを入れ直す」ボタンを押してください。\n"
             "ソース版: ターミナルで `./install_local_asr.command` を実行してください。\n"
             "インストール済みの場合はアプリを再起動してください。",
             resolved_reference_audio,
@@ -502,307 +502,604 @@ def build_settings_summary() -> str:
 
 CSS = """
     :root {
-      --page-bg: linear-gradient(135deg, #f6efe7 0%, #f2f8f2 55%, #eef6ff 100%);
-      --card-bg: rgba(255, 255, 255, 0.86);
-      --card-border: rgba(57, 88, 74, 0.12);
-      --headline: #1e2c25;
-      --body: #33423b;
-      --accent: #2b6a4a;
-      --accent-2: #cb6b3d;
+      --page-bg: radial-gradient(circle at top left, #fff4e8 0%, #f4fbf6 42%, #eef5ff 100%);
+      --card-bg: rgba(255, 255, 255, 0.88);
+      --card-strong: rgba(255, 255, 255, 0.96);
+      --card-border: rgba(47, 76, 63, 0.12);
+      --headline: #1d2c24;
+      --body: #355045;
+      --muted: #6c8376;
+      --accent: #2f7a53;
+      --accent-soft: rgba(47, 122, 83, 0.1);
+      --accent-2: #ca6a3d;
+      --warning-bg: rgba(202, 106, 61, 0.08);
+      --shadow: 0 20px 55px rgba(31, 50, 40, 0.08);
+    }
+
+    body, .gradio-container {
+      background: var(--page-bg) !important;
+      color: var(--body);
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    }
+
+    .gradio-container {
+      max-width: 1320px !important;
+      margin: 0 auto !important;
+      padding: 20px 18px 28px !important;
+    }
+
+    footer,
+    .built-with,
+    [data-testid="api-button"],
+    [data-testid="settings-button"],
+    button[aria-label="Settings"],
+    button[aria-label="API"],
+    .gradio-container .settings,
+    .gradio-container .prose .md > h1 + p:last-child {
+      display: none !important;
     }
 
     .app-shell {
-      max-width: 980px;
-      margin: 0 auto;
+      gap: 16px;
     }
 
     .hero {
-      background: var(--card-bg);
+      background: linear-gradient(145deg, rgba(255,255,255,0.95), rgba(248, 252, 249, 0.88));
       border: 1px solid var(--card-border);
-      border-radius: 24px;
-      padding: 28px;
-      margin-bottom: 8px;
-      box-shadow: 0 24px 60px rgba(40, 62, 51, 0.08);
+      border-radius: 28px;
+      padding: 30px 32px;
+      box-shadow: var(--shadow);
+      margin-bottom: 4px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+      gap: 22px;
+      align-items: start;
     }
 
     .hero h1 {
       color: var(--headline);
-      font-size: 2.2rem;
-      margin-bottom: 8px;
+      font-size: 2.45rem;
+      line-height: 1.08;
+      margin: 0 0 10px;
+      letter-spacing: -0.02em;
     }
 
     .hero p, .hero li {
       color: var(--body);
       line-height: 1.7;
+      margin: 0;
+    }
+
+    .hero-lead {
+      font-size: 1.02rem;
+      margin-bottom: 14px !important;
+    }
+
+    .hero-note {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: var(--warning-bg);
+      border: 1px solid rgba(202, 106, 61, 0.16);
+      font-size: 0.92rem;
+    }
+
+    .hero-side {
+      display: grid;
+      gap: 12px;
+    }
+
+    .summary-card {
+      background: var(--card-strong);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 18px 18px 16px;
+    }
+
+    .summary-title {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
     }
 
     .steps-overview {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 16px 0 8px;
-      flex-wrap: wrap;
-    }
-
-    .step-chip {
-      background: rgba(43, 106, 74, 0.08);
-      color: var(--accent);
-      border: 1px solid rgba(43, 106, 74, 0.22);
-      border-radius: 20px;
-      padding: 4px 14px;
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-
-    .step-chip.primary {
-      background: var(--accent);
-      color: white;
-      border-color: var(--accent);
-    }
-
-    .step-arrow {
-      color: #aab;
-      font-size: 1.1rem;
-    }
-
-    .tip {
-      border-left: 4px solid var(--accent-2);
-      padding-left: 14px;
-      margin-top: 12px;
-      font-size: 0.875rem;
-    }
-
-    .step-card {
-      border: 1px solid var(--card-border) !important;
-      border-radius: 16px !important;
-      padding: 20px 20px 16px !important;
-      margin-bottom: 12px !important;
-      background: var(--card-bg) !important;
-      box-shadow: 0 4px 16px rgba(40, 62, 51, 0.05) !important;
-    }
-
-    .step-header {
-      display: flex;
-      align-items: baseline;
+      display: grid;
       gap: 10px;
-      padding-bottom: 12px;
-      border-bottom: 1.5px solid rgba(43, 106, 74, 0.12);
-      margin-bottom: 14px;
     }
 
-    .step-num {
+    .step-line {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .step-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
       background: var(--accent);
       color: white;
-      border-radius: 50%;
-      width: 26px;
-      height: 26px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 0.85rem;
+      box-shadow: inset 0 -4px 10px rgba(0,0,0,0.12);
+    }
+
+    .step-line strong {
+      display: block;
+      color: var(--headline);
+      margin-bottom: 2px;
+      font-size: 0.97rem;
+    }
+
+    .step-line span {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .quick-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .fact-pill {
+      padding: 11px 12px;
+      border-radius: 14px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.87rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .main-tabs {
+      margin-top: 4px;
+    }
+
+    .main-tabs > .tab-nav {
+      gap: 10px;
+      border-bottom: none !important;
+      margin-bottom: 14px;
+    }
+
+    .main-tabs > .tab-nav button {
+      border-radius: 999px !important;
+      border: 1px solid rgba(47, 122, 83, 0.18) !important;
+      background: rgba(255,255,255,0.72) !important;
+      color: var(--body) !important;
+      padding: 10px 18px !important;
+      font-weight: 700 !important;
+    }
+
+    .main-tabs > .tab-nav button.selected {
+      background: var(--accent) !important;
+      color: white !important;
+      border-color: var(--accent) !important;
+    }
+
+    .surface-card {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 24px !important;
+      background: var(--card-bg) !important;
+      box-shadow: var(--shadow) !important;
+      padding: 18px !important;
+    }
+
+    .workflow-grid {
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .step-card {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 20px !important;
+      padding: 18px !important;
+      background: var(--card-strong) !important;
+      box-shadow: 0 8px 24px rgba(33, 49, 42, 0.04) !important;
+      margin: 0 0 14px !important;
+    }
+
+    .step-header {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
       flex-shrink: 0;
-      line-height: 1;
+      margin-top: 2px;
     }
 
     .step-title {
+      display: block;
       color: var(--headline);
-      font-size: 1.02rem;
+      font-size: 1.05rem;
       font-weight: 700;
+      margin-bottom: 4px;
     }
 
     .step-desc {
-      color: #6b8070;
-      font-size: 0.83rem;
+      display: block;
+      color: var(--muted);
+      font-size: 0.87rem;
+      line-height: 1.55;
     }
-    """
+
+    .card-caption {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin: -6px 0 10px;
+    }
+
+    .transcribe-spotlight {
+      background: linear-gradient(135deg, rgba(47, 122, 83, 0.12), rgba(40, 98, 145, 0.08));
+      border: 1px solid rgba(47, 122, 83, 0.14);
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .transcribe-spotlight strong {
+      display: block;
+      color: var(--headline);
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+
+    .transcribe-spotlight span {
+      display: block;
+      color: var(--body);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .status-panel, .output-panel, .side-card {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 20px !important;
+      background: var(--card-strong) !important;
+      box-shadow: 0 8px 24px rgba(33, 49, 42, 0.04) !important;
+      padding: 18px !important;
+      margin-bottom: 14px !important;
+    }
+
+    .panel-title {
+      color: var(--headline);
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .hint-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .hint-item {
+      border-radius: 16px;
+      padding: 14px 15px;
+      background: rgba(47, 122, 83, 0.06);
+      border: 1px solid rgba(47, 122, 83, 0.1);
+    }
+
+    .hint-item strong {
+      display: block;
+      color: var(--headline);
+      margin-bottom: 4px;
+      font-size: 0.94rem;
+    }
+
+    .hint-item span {
+      color: var(--body);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .resource-links {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .resource-link {
+      display: block;
+      text-decoration: none;
+      color: var(--accent);
+      background: rgba(47, 122, 83, 0.08);
+      border: 1px solid rgba(47, 122, 83, 0.14);
+      border-radius: 15px;
+      padding: 13px 14px;
+      font-weight: 700;
+    }
+
+    .resource-link small {
+      display: block;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .settings-note {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+    }
+
+    .gradio-button.primary, .gradio-button.secondary {
+      border-radius: 14px !important;
+      font-weight: 700 !important;
+    }
+
+    @media (max-width: 1100px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .workflow-grid {
+        flex-direction: column !important;
+      }
+
+      .quick-facts {
+        grid-template-columns: 1fr;
+      }
+
+      .gradio-container {
+        padding: 14px 12px 22px !important;
+      }
+
+      .hero {
+        padding: 22px 18px;
+      }
+    }
+"""
+
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="かんたんボイスクローン for Qwen-TTS") as demo:
+        prepared_reference_state = gr.State(value=None)
+
         with gr.Column(elem_classes=["app-shell"]):
             gr.HTML(
                 """
                 <section class="hero">
-                  <h1>かんたんボイスクローン</h1>
-                  <p>Qwen-TTS を日本語でわかりやすく使うための、初心者向けローカルアプリです。</p>
-                  <div class="steps-overview">
-                    <span class="step-chip">① 参照音声を用意</span>
-                    <span class="step-arrow">→</span>
-                    <span class="step-chip">② 文字起こしを入力</span>
-                    <span class="step-arrow">→</span>
-                    <span class="step-chip">③ 読ませる文章を入力</span>
-                    <span class="step-arrow">→</span>
-                    <span class="step-chip primary">④ 音声を生成</span>
+                  <div class="hero-grid">
+                    <div>
+                      <h1>かんたんボイスクローン</h1>
+                      <p class="hero-lead">Qwen-TTS を日本語で迷わず使うための、初心者向けローカルアプリです。まずは左側で声の素材を整え、右側で文字と生成結果を確認してください。</p>
+                      <div class="hero-note">このアプリは話者をなるべく寄せますが、完全に同じ声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</div>
+                    </div>
+                    <div class="hero-side">
+                      <div class="summary-card">
+                        <div class="summary-title">最短 3 ステップ</div>
+                        <div class="steps-overview">
+                          <div class="step-line"><span class="step-badge">1</span><div><strong>素材を入れる</strong><span>音声か動画をアップロードして、必要なら前後を切ります。</span></div></div>
+                          <div class="step-line"><span class="step-badge">2</span><div><strong>文字起こしを整える</strong><span>自動文字起こしを押して、内容が合っているかだけ確認します。</span></div></div>
+                          <div class="step-line"><span class="step-badge">3</span><div><strong>読ませたい文章を生成</strong><span>短い文から試して、良ければそのまま保存します。</span></div></div>
+                        </div>
+                      </div>
+                      <div class="summary-card">
+                        <div class="summary-title">先に知っておくこと</div>
+                        <div class="quick-facts">
+                          <div class="fact-pill">参照音声は 3 秒以上</div>
+                          <div class="fact-pill">最初は 1〜2 文で試す</div>
+                          <div class="fact-pill">雑音が少ない素材が有利</div>
+                          <div class="fact-pill">初回は少し時間がかかる</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p class="tip">このアプリは話者をなるべく寄せますが、完全に同一の声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</p>
                 </section>
                 """
             )
 
-            prepared_reference_state = gr.State(value=None)
+            with gr.Tabs(elem_classes=["main-tabs"]):
+                with gr.Tab("音声生成"):
+                    with gr.Group(elem_classes=["surface-card"]):
+                        with gr.Row(elem_classes=["workflow-grid"]):
+                            with gr.Column(scale=7, min_width=520):
+                                with gr.Group(elem_classes=["step-card"]):
+                                    gr.HTML(
+                                        '<div class="step-header">'
+                                        '<span class="step-num">1</span>'
+                                        '<div><span class="step-title">参照音声を用意する</span>'
+                                        '<span class="step-desc">音声でも動画でも OK です。必要なら前後だけ切ってから使えます。</span></div>'
+                                        '</div>'
+                                    )
+                                    with gr.Row():
+                                        reference_audio = gr.Audio(
+                                            type="filepath",
+                                            label="参照音声（アップロード / 録音）",
+                                            sources=["upload", "microphone"],
+                                        )
+                                        reference_video = gr.Video(
+                                            label="または参照動画",
+                                            sources=["upload"],
+                                            include_audio=True,
+                                        )
+                                    with gr.Row():
+                                        trim_start_sec = gr.Number(
+                                            label="開始位置（秒）",
+                                            value=0,
+                                            minimum=0,
+                                            precision=1,
+                                            info="先頭を飛ばしたいときだけ入力",
+                                        )
+                                        trim_end_sec = gr.Number(
+                                            label="終了位置（秒）",
+                                            value=0,
+                                            minimum=0,
+                                            precision=1,
+                                            info="0 のままなら最後まで使います",
+                                        )
+                                        auto_trim_silence = gr.Checkbox(
+                                            label="前後の無音を自動でカット",
+                                            value=True,
+                                        )
+                                    prepare_button = gr.Button("素材を整えて確認する", variant="secondary")
+                                    prepared_reference_audio = gr.Audio(
+                                        type="filepath",
+                                        label="整えた参照音声（確認用）",
+                                        interactive=False,
+                                    )
 
-            # ── ステップ① ──────────────────────────────────────
-            with gr.Group(elem_classes=["step-card"]):
-                gr.HTML(
-                    '<div class="step-header">'
-                    '<span class="step-num">①</span>'
-                    '<span class="step-title">参照音声を用意する</span>'
-                    '<span class="step-desc">クローンしたい声の手本・3〜30 秒程度が最適</span>'
-                    "</div>"
-                )
-                with gr.Row():
-                    reference_audio = gr.Audio(
-                        type="filepath",
-                        label="参照音声（マイク録音も可）",
-                        sources=["upload", "microphone"],
-                    )
-                    reference_video = gr.Video(
-                        label="または動画からでもOK",
-                        sources=["upload"],
-                        include_audio=True,
-                    )
-                with gr.Row():
-                    trim_start_sec = gr.Number(
-                        label="切り出し開始（秒）",
-                        value=0,
-                        minimum=0,
-                        precision=1,
-                        info="先頭を読み飛ばしたい場合のみ入力",
-                    )
-                    trim_end_sec = gr.Number(
-                        label="切り出し終了（秒）",
-                        value=0,
-                        minimum=0,
-                        precision=1,
-                        info="0 のままにすると末尾まで使います",
-                    )
-                    auto_trim_silence = gr.Checkbox(
-                        label="前後の無音を自動カット",
-                        value=True,
-                    )
-                prepare_button = gr.Button("参照素材を整える", variant="secondary")
-                prepared_reference_audio = gr.Audio(
-                    type="filepath",
-                    label="整えた参照音声（確認用）",
-                    interactive=False,
-                )
+                                with gr.Group(elem_classes=["step-card"]):
+                                    gr.HTML(
+                                        '<div class="step-header">'
+                                        '<span class="step-num">2</span>'
+                                        '<div><span class="step-title">参照音声の文字起こしを確認する</span>'
+                                        '<span class="step-desc">ここがズレると、声が別人っぽくなりやすいです。</span></div>'
+                                        '</div>'
+                                    )
+                                    gr.HTML(
+                                        '<div class="transcribe-spotlight">'
+                                        '<strong>まずは「自動文字起こし」を押してください</strong>'
+                                        '<span>参照音声の内容を下書きで入れます。内容が合っているか確認して、違っていたら少し直すだけで使えます。</span>'
+                                        '</div>'
+                                    )
+                                    with gr.Row():
+                                        transcription_backend = gr.Dropdown(
+                                            label="文字起こし方式",
+                                            choices=TRANSCRIBE_BACKENDS,
+                                            value="自動選択",
+                                            interactive=True,
+                                        )
+                                        transcribe_reference_button = gr.Button(
+                                            "自動文字起こしする", variant="primary", size="lg"
+                                        )
+                                    reference_text = gr.Textbox(
+                                        label="参照音声の文字起こし",
+                                        placeholder="例: おはようございます。今日は少しだけ自己紹介をします。",
+                                        lines=4,
+                                        info="参照音声で実際に話している内容を、省略せずそのまま入れてください。",
+                                    )
+                                    fill_reference_text_button = gr.Button(
+                                        "例文を入れて試す", size="sm", variant="secondary"
+                                    )
 
-            # ── ステップ② ──────────────────────────────────────
-            with gr.Group(elem_classes=["step-card"]):
-                gr.HTML(
-                    '<div class="step-header">'
-                    '<span class="step-num">②</span>'
-                    '<span class="step-title">参照音声の内容を文字起こしする</span>'
-                    '<span class="step-desc">1 文字でもズレると声質がブレやすくなります</span>'
-                    "</div>"
-                )
-                reference_text = gr.Textbox(
-                    label="参照音声の文字起こし",
-                    placeholder="例: おはようございます。今日は少しだけ自己紹介をします。",
-                    lines=3,
-                    info="参照音声で話している内容を省略せず正確に入力してください。自動文字起こしを使う場合は、先にローカル文字起こしを追加してください。",
-                )
-                with gr.Row():
-                    transcription_backend = gr.Dropdown(
-                        label="文字起こし方式",
-                        choices=TRANSCRIBE_BACKENDS,
-                        value="自動選択",
-                        interactive=True,
-                    )
-                    transcribe_reference_button = gr.Button(
-                        "自動文字起こし ✨", variant="secondary"
-                    )
-                fill_reference_text_button = gr.Button(
-                    "例文を入れて試す", size="sm", variant="secondary"
-                )
+                            with gr.Column(scale=5, min_width=400):
+                                with gr.Group(elem_classes=["step-card"]):
+                                    gr.HTML(
+                                        '<div class="step-header">'
+                                        '<span class="step-num">3</span>'
+                                        '<div><span class="step-title">読ませたい文章を入れて生成する</span>'
+                                        '<span class="step-desc">最初は短い文で確認すると失敗が少なく、結果も見やすいです。</span></div>'
+                                        '</div>'
+                                    )
+                                    target_text = gr.Textbox(
+                                        label="読ませたい文章",
+                                        placeholder="例: こんにちは。これはボイスクローンのテストです。",
+                                        lines=5,
+                                        info="最初は 1〜2 文の短い文章から試してください。",
+                                    )
+                                    with gr.Row():
+                                        target_language = gr.Dropdown(
+                                            label="読み上げ言語",
+                                            choices=SUPPORTED_LANGUAGES,
+                                            value=DEFAULT_LANGUAGE_LABEL,
+                                            interactive=True,
+                                        )
+                                        fill_target_text_button = gr.Button(
+                                            "例文を入れて試す", size="sm", variant="secondary"
+                                        )
+                                    generate_button = gr.Button("音声を生成する", variant="primary", size="lg")
 
-            # ── ステップ③ ──────────────────────────────────────
-            with gr.Group(elem_classes=["step-card"]):
-                gr.HTML(
-                    '<div class="step-header">'
-                    '<span class="step-num">③</span>'
-                    '<span class="step-title">読ませたい文章と言語を設定する</span>'
-                    '<span class="step-desc">最初は短め（1〜2 文）で試すと成功しやすいです</span>'
-                    "</div>"
-                )
-                target_text = gr.Textbox(
-                    label="読ませたい文章",
-                    placeholder="例: こんにちは。これはボイスクローンのテストです。",
-                    lines=4,
-                    info="最初は短め（1〜2 文）で試すと成功しやすいです。",
-                )
-                with gr.Row():
-                    target_language = gr.Dropdown(
-                        label="読み上げ言語",
-                        choices=SUPPORTED_LANGUAGES,
-                        value=DEFAULT_LANGUAGE_LABEL,
-                        interactive=True,
-                    )
-                    fill_target_text_button = gr.Button(
-                        "例文を入れて試す", size="sm", variant="secondary"
-                    )
+                                with gr.Group(elem_classes=["status-panel"]):
+                                    gr.HTML('<div class="panel-title">現在の状況</div>')
+                                    status = gr.Markdown(
+                                        "左側で素材を整えたあと、\n"
+                                        "1. 自動文字起こし\n"
+                                        "2. 読ませたい文章を入力\n"
+                                        "3. 音声を生成する\n"
+                                        "の順に進めてください。**初回はモデル読み込みで 1〜2 分かかります。**"
+                                    )
 
-            # ── ステップ④：生成 ────────────────────────────────
-            generate_button = gr.Button("④ 音声を生成する", variant="primary", size="lg")
-            status = gr.Markdown(
-                "① 参照音声 → ② 文字起こし → ③ 読ませたい文章 の順に入力して「④ 音声を生成する」を押してください。"
-                "　**初回はモデルの読み込みで 1〜2 分かかります。**"
-            )
+                                with gr.Group(elem_classes=["output-panel"]):
+                                    gr.HTML('<div class="panel-title">生成結果</div>')
+                                    output_audio = gr.Audio(
+                                        type="filepath",
+                                        label="生成した音声",
+                                        interactive=False,
+                                    )
+                                    open_outputs_button = gr.Button("出力フォルダを開く", size="sm", variant="secondary")
 
-            output_audio = gr.Audio(
-                type="filepath",
-                label="生成結果（ここで再生・ダウンロードできます）",
-                interactive=False,
-            )
-            open_outputs_button = gr.Button("📁 出力フォルダを開く", size="sm")
+                                with gr.Group(elem_classes=["side-card"]):
+                                    gr.HTML(
+                                        """
+                                        <div class="panel-title">失敗しにくいコツ</div>
+                                        <div class="hint-list">
+                                          <div class="hint-item"><strong>声が別人っぽい</strong><span>参照音声の文字起こしが少しでもズレていないか確認してください。</span></div>
+                                          <div class="hint-item"><strong>音が割れる・不安定</strong><span>雑音が少ない素材に変えて、まずは短い文章で試してください。</span></div>
+                                          <div class="hint-item"><strong>文字起こしがうまく出ない</strong><span>別の素材にするか、文字起こし欄を手入力で直してください。</span></div>
+                                        </div>
+                                        """
+                                    )
 
-            # ── 設定 ────────────────────────────────────────────
-            with gr.Accordion("⚙ 設定（モデルの変更など）", open=False):
-                settings_summary = gr.Markdown(build_settings_summary())
-                with gr.Row():
-                    qwen_model_setting = gr.Dropdown(
-                        label="Qwen-TTS モデル",
-                        choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
-                        value=current_qwen_label(),
-                        interactive=True,
-                        info="高精度 1.7B が品質重視。軽量 0.6B は速度重視。",
-                    )
-                    local_asr_setting = gr.Dropdown(
-                        label="ローカル faster-whisper モデル",
-                        choices=LOCAL_ASR_MODEL_CHOICES,
-                        value=APP_CONFIG.local_asr_model,
-                        interactive=True,
-                        info="small が精度とスピードのバランスが良いです。",
-                    )
-                save_settings_button = gr.Button("設定を保存")
-                save_settings_button.click(
-                    fn=save_model_settings,
-                    inputs=[qwen_model_setting, local_asr_setting],
-                    outputs=[status],
-                )
-                save_settings_button.click(
-                    fn=build_settings_summary,
-                    outputs=[settings_summary],
-                )
+                with gr.Tab("設定"):
+                    with gr.Group(elem_classes=["surface-card"]):
+                        gr.HTML('<div class="panel-title">モデル設定</div>')
+                        settings_summary = gr.Markdown(
+                            build_settings_summary(), elem_classes=["settings-note"]
+                        )
+                        with gr.Row():
+                            qwen_model_setting = gr.Dropdown(
+                                label="Qwen-TTS モデル",
+                                choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
+                                value=current_qwen_label(),
+                                interactive=True,
+                                info="高精度 1.7B は品質重視、軽量 0.6B は軽さ重視です。",
+                            )
+                            local_asr_setting = gr.Dropdown(
+                                label="ローカル文字起こしモデル",
+                                choices=LOCAL_ASR_MODEL_CHOICES,
+                                value=APP_CONFIG.local_asr_model,
+                                interactive=True,
+                                info="small が標準です。base は軽く、medium は少し高精度です。",
+                            )
+                        save_settings_button = gr.Button("設定を保存する", variant="primary")
+                        settings_status = gr.Markdown("ここで保存した設定は、次の生成から反映されます。")
 
-            gr.Markdown(
-                """
----
-### うまくいかないときのチェックリスト
+                with gr.Tab("ヘルプ"):
+                    with gr.Group(elem_classes=["surface-card"]):
+                        gr.HTML(
+                            """
+                            <div class="panel-title">困ったときの見直しポイント</div>
+                            <div class="hint-list">
+                              <div class="hint-item"><strong>声が合わない</strong><span>参照音声の文字起こしを、聞こえた通りに 1 文字も省略せず入れてください。</span></div>
+                              <div class="hint-item"><strong>動画を入れたら失敗する</strong><span>動画から音声を取り出すには ffmpeg が必要です。ターミナルなら <code>brew install ffmpeg</code> です。</span></div>
+                              <div class="hint-item"><strong>生成が遅い</strong><span>初回はモデル読み込みに時間がかかります。再起動後も遅い場合は、まず 1 文だけで試してください。</span></div>
+                              <div class="hint-item"><strong>ローカル文字起こしが使えない</strong><span>DMG 版ではセットアップ完了後に同梱環境が入ります。ソース版では <code>./install_local_asr.command</code> を実行してください。</span></div>
+                            </div>
+                            <div class="resource-links">
+                              <a class="resource-link" href="https://github.com/kantaro4123/qwen-tts-jp-starter" target="_blank" rel="noopener noreferrer">GitHub レポジトリを見る<small>更新状況、README、リリース履歴を確認できます。</small></a>
+                              <a class="resource-link" href="https://github.com/QwenLM/Qwen3-TTS" target="_blank" rel="noopener noreferrer">Qwen3-TTS 公式ページを見る<small>モデル本体の仕様や最新情報を確認したいときはこちらです。</small></a>
+                            </div>
+                            """
+                        )
 
-| 症状 | 対処 |
-|---|---|
-| 声が別人っぽい | 参照テキストを省略なく正確に入力する |
-| 声が不安定・割れる | 雑音の少ない 3〜30 秒の音声を使う |
-| 動画を入れたが反応しない | ffmpeg が必要です（`brew install ffmpeg`） |
-| 生成が極端に遅い | 一度再起動して、まず 1 文で試す |
-| 文字起こしが空になる | 別の素材を試すか、手入力に切り替える |
-
-> 参照素材は保存前にモノラル化・24 kHz 化・軽い音量調整を自動で行っています。
-                """
-            )
-
-            # ── イベントハンドラ ─────────────────────────────────
             prepare_button.click(
                 fn=prepare_reference_audio,
                 inputs=[reference_audio, reference_video, trim_start_sec, trim_end_sec, auto_trim_silence],
@@ -840,8 +1137,18 @@ def build_app() -> gr.Blocks:
                 outputs=[status, prepared_reference_audio, output_audio],
             )
             open_outputs_button.click(fn=open_output_folder, outputs=[status])
+            save_settings_button.click(
+                fn=save_model_settings,
+                inputs=[qwen_model_setting, local_asr_setting],
+                outputs=[settings_status],
+            )
+            save_settings_button.click(
+                fn=build_settings_summary,
+                outputs=[settings_summary],
+            )
 
     return demo
+
 
 
 if __name__ == "__main__":
