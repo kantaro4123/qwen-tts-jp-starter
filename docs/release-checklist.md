@@ -13,8 +13,9 @@
 1. `README.md` の冒頭リンクが最新 Release 直リンクになっている
 2. `docs/releases/<version>.md` を作成済み
 3. `はじめに.txt` の案内が最新の配布手順に合っている
-4. `swiftc -typecheck` が通る
-5. `zsh -n` と `py_compile` が通る
+4. 先に `./setup.command` を実行して `.venv` を作成済み
+5. `swiftc -typecheck` が通る
+6. `zsh -n` と `py_compile` が通る
 
 ## 標準の 1.7B 同梱版を作る
 

@@ -19,7 +19,6 @@ from qwen_tts import Qwen3TTSModel
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
-TRANSCRIBE_CLI = Path(os.environ.get("TRANSCRIBE_CLI", str(Path.home() / ".codex/skills/transcribe/scripts/transcribe_diarize.py")))
 LOCAL_ASR_MODEL = os.environ.get("QWEN_TTS_LOCAL_ASR_MODEL", "small")
 SETTINGS_PATH = Path("config/settings.json")
 QWEN_TTS_MODEL_CHOICES = {
@@ -46,7 +45,7 @@ DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
 DEFAULT_GENERATION_KWARGS = {}
 TARGET_REFERENCE_SAMPLE_RATE = 24000
 TARGET_REFERENCE_DBFS = -20.0
-TRANSCRIBE_BACKENDS = ["自動選択", "OpenAI API", "ローカル faster-whisper"]
+TRANSCRIBE_BACKENDS = ["自動選択", "ローカル faster-whisper"]
 TRANSCRIBE_LANGUAGE_HINTS = {
     "Auto": "",
     "Chinese": "zh",
@@ -92,8 +91,11 @@ def load_model_path_overrides() -> dict[str, str]:
     for model_id, local_path in data.items():
         if not isinstance(model_id, str) or not isinstance(local_path, str):
             continue
-        if Path(local_path).exists():
-            result[model_id] = local_path
+        resolved_local_path = Path(local_path)
+        if not resolved_local_path.is_absolute():
+            resolved_local_path = (path.parent / resolved_local_path).resolve()
+        if resolved_local_path.exists():
+            result[model_id] = str(resolved_local_path)
     return result
 
 
@@ -358,71 +360,30 @@ def transcribe_reference_audio(
         except Exception as exc:
             return f"参照素材の準備に失敗しました: {exc}", None, None, ""
 
-    backend_label = transcription_backend_selector
-    if backend_label == "自動選択":
-        if os.environ.get("OPENAI_API_KEY") and TRANSCRIBE_CLI.exists():
-            backend_label = "OpenAI API"
-        else:
-            backend_label = "ローカル faster-whisper"
-
     language_hint = TRANSCRIBE_LANGUAGE_HINTS.get(target_language, "")
 
-    if backend_label == "OpenAI API":
-        if not os.environ.get("OPENAI_API_KEY"):
-            return (
-                "OpenAI API での自動文字起こしには `OPENAI_API_KEY` が必要です。",
-                resolved_reference_audio,
-                resolved_reference_audio,
-                "",
-            )
-        if not TRANSCRIBE_CLI.exists():
-            return (
-                f"文字起こしスクリプトが見つかりませんでした: {TRANSCRIBE_CLI}",
-                resolved_reference_audio,
-                resolved_reference_audio,
-                "",
-            )
-        cmd = [
-            "python3",
-            str(TRANSCRIBE_CLI),
+    try:
+        from faster_whisper import WhisperModel
+    except Exception:
+        return (
+            "ローカル文字起こし（faster-whisper）は別途インストールが必要です。\n"
+            "DMG版: アプリ内「音声認識を追加（任意）」ボタンを押してください。\n"
+            "ソース版: ターミナルで `./install_local_asr.command` を実行してください。\n"
+            "インストール済みの場合はアプリを再起動してください。",
             resolved_reference_audio,
-            "--response-format",
-            "text",
-            "--stdout",
-        ]
-        if language_hint:
-            cmd.extend(["--language", language_hint])
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            error_text = (result.stderr or result.stdout or "unknown error").strip()
-            return (
-                f"自動文字起こしに失敗しました: {error_text}",
-                resolved_reference_audio,
-                resolved_reference_audio,
-                "",
-            )
-        transcript = result.stdout.strip()
-        backend_status = "OpenAI API"
-    else:
-        try:
-            from faster_whisper import WhisperModel
-        except Exception:
-            return (
-                "ローカル faster-whisper が未インストールです。`./install_local_asr.command` を実行してください。",
-                resolved_reference_audio,
-                resolved_reference_audio,
-                "",
-            )
-        compute_type = "int8"
-        model = WhisperModel(APP_CONFIG.local_asr_model, device="cpu", compute_type=compute_type)
-        segments, _info = model.transcribe(
             resolved_reference_audio,
-            language=(language_hint or None),
-            vad_filter=True,
-            condition_on_previous_text=False,
+            "",
         )
-        transcript = "".join(segment.text for segment in segments).strip()
-        backend_status = f"ローカル faster-whisper ({APP_CONFIG.local_asr_model})"
+    compute_type = "int8"
+    model = WhisperModel(APP_CONFIG.local_asr_model, device="cpu", compute_type=compute_type)
+    segments, _info = model.transcribe(
+        resolved_reference_audio,
+        language=(language_hint or None),
+        vad_filter=True,
+        condition_on_previous_text=False,
+    )
+    transcript = "".join(segment.text for segment in segments).strip()
+    backend_status = f"ローカル faster-whisper ({APP_CONFIG.local_asr_model})"
 
     if not transcript:
         return (
@@ -558,6 +519,7 @@ CSS = """
       border: 1px solid var(--card-border);
       border-radius: 24px;
       padding: 28px;
+      margin-bottom: 8px;
       box-shadow: 0 24px 60px rgba(40, 62, 51, 0.08);
     }
 
@@ -572,10 +534,84 @@ CSS = """
       line-height: 1.7;
     }
 
+    .steps-overview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0 8px;
+      flex-wrap: wrap;
+    }
+
+    .step-chip {
+      background: rgba(43, 106, 74, 0.08);
+      color: var(--accent);
+      border: 1px solid rgba(43, 106, 74, 0.22);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .step-chip.primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .step-arrow {
+      color: #aab;
+      font-size: 1.1rem;
+    }
+
     .tip {
       border-left: 4px solid var(--accent-2);
       padding-left: 14px;
       margin-top: 12px;
+      font-size: 0.875rem;
+    }
+
+    .step-card {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 16px !important;
+      padding: 20px 20px 16px !important;
+      margin-bottom: 12px !important;
+      background: var(--card-bg) !important;
+      box-shadow: 0 4px 16px rgba(40, 62, 51, 0.05) !important;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1.5px solid rgba(43, 106, 74, 0.12);
+      margin-bottom: 14px;
+    }
+
+    .step-num {
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .step-title {
+      color: var(--headline);
+      font-size: 1.02rem;
+      font-weight: 700;
+    }
+
+    .step-desc {
+      color: #6b8070;
+      font-size: 0.83rem;
     }
     """
 
@@ -587,11 +623,15 @@ def build_app() -> gr.Blocks:
                 <section class="hero">
                   <h1>かんたんボイスクローン</h1>
                   <p>Qwen-TTS を日本語でわかりやすく使うための、初心者向けローカルアプリです。</p>
-                  <ol>
-                    <li>音声または動画を入れて、必要なら切り出す</li>
-                    <li>その音声の文字起こしを正確に入力する</li>
-                    <li>読ませたい文章を入れて生成する</li>
-                  </ol>
+                  <div class="steps-overview">
+                    <span class="step-chip">① 参照音声を用意</span>
+                    <span class="step-arrow">→</span>
+                    <span class="step-chip">② 文字起こしを入力</span>
+                    <span class="step-arrow">→</span>
+                    <span class="step-chip">③ 読ませる文章を入力</span>
+                    <span class="step-arrow">→</span>
+                    <span class="step-chip primary">④ 音声を生成</span>
+                  </div>
                   <p class="tip">このアプリは話者をなるべく寄せますが、完全に同一の声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</p>
                 </section>
                 """
@@ -599,80 +639,139 @@ def build_app() -> gr.Blocks:
 
             prepared_reference_state = gr.State(value=None)
 
-            with gr.Row():
-                reference_audio = gr.Audio(
+            # ── ステップ① ──────────────────────────────────────
+            with gr.Group(elem_classes=["step-card"]):
+                gr.HTML(
+                    '<div class="step-header">'
+                    '<span class="step-num">①</span>'
+                    '<span class="step-title">参照音声を用意する</span>'
+                    '<span class="step-desc">クローンしたい声の手本・3〜30 秒程度が最適</span>'
+                    "</div>"
+                )
+                with gr.Row():
+                    reference_audio = gr.Audio(
+                        type="filepath",
+                        label="参照音声（マイク録音も可）",
+                        sources=["upload", "microphone"],
+                    )
+                    reference_video = gr.Video(
+                        label="または動画からでもOK",
+                        sources=["upload"],
+                        include_audio=True,
+                    )
+                with gr.Row():
+                    trim_start_sec = gr.Number(
+                        label="切り出し開始（秒）",
+                        value=0,
+                        minimum=0,
+                        precision=1,
+                        info="先頭を読み飛ばしたい場合のみ入力",
+                    )
+                    trim_end_sec = gr.Number(
+                        label="切り出し終了（秒）",
+                        value=0,
+                        minimum=0,
+                        precision=1,
+                        info="0 のままにすると末尾まで使います",
+                    )
+                    auto_trim_silence = gr.Checkbox(
+                        label="前後の無音を自動カット",
+                        value=True,
+                    )
+                prepare_button = gr.Button("参照素材を整える", variant="secondary")
+                prepared_reference_audio = gr.Audio(
                     type="filepath",
-                    label="1. 参照音声",
-                    sources=["upload", "microphone"],
-                )
-                reference_video = gr.Video(
-                    label="参考用の動画でもOK",
-                    sources=["upload"],
-                    include_audio=True,
+                    label="整えた参照音声（確認用）",
+                    interactive=False,
                 )
 
-            with gr.Row():
-                trim_start_sec = gr.Number(label="切り出し開始秒", value=0, minimum=0, precision=1)
-                trim_end_sec = gr.Number(label="切り出し終了秒", value=0, minimum=0, precision=1)
-                auto_trim_silence = gr.Checkbox(label="前後の無音を自動でカット", value=True)
+            # ── ステップ② ──────────────────────────────────────
+            with gr.Group(elem_classes=["step-card"]):
+                gr.HTML(
+                    '<div class="step-header">'
+                    '<span class="step-num">②</span>'
+                    '<span class="step-title">参照音声の内容を文字起こしする</span>'
+                    '<span class="step-desc">1 文字でもズレると声質がブレやすくなります</span>'
+                    "</div>"
+                )
+                reference_text = gr.Textbox(
+                    label="参照音声の文字起こし",
+                    placeholder="例: おはようございます。今日は少しだけ自己紹介をします。",
+                    lines=3,
+                    info="参照音声で話している内容を省略せず正確に入力してください。自動文字起こしを使う場合は、先にローカル文字起こしを追加してください。",
+                )
+                with gr.Row():
+                    transcription_backend = gr.Dropdown(
+                        label="文字起こし方式",
+                        choices=TRANSCRIBE_BACKENDS,
+                        value="自動選択",
+                        interactive=True,
+                    )
+                    transcribe_reference_button = gr.Button(
+                        "自動文字起こし ✨", variant="secondary"
+                    )
+                fill_reference_text_button = gr.Button(
+                    "例文を入れて試す", size="sm", variant="secondary"
+                )
 
-            prepared_reference_audio = gr.Audio(
-                type="filepath",
-                label="整えた参照音声",
-                interactive=False,
-            )
+            # ── ステップ③ ──────────────────────────────────────
+            with gr.Group(elem_classes=["step-card"]):
+                gr.HTML(
+                    '<div class="step-header">'
+                    '<span class="step-num">③</span>'
+                    '<span class="step-title">読ませたい文章と言語を設定する</span>'
+                    '<span class="step-desc">最初は短め（1〜2 文）で試すと成功しやすいです</span>'
+                    "</div>"
+                )
+                target_text = gr.Textbox(
+                    label="読ませたい文章",
+                    placeholder="例: こんにちは。これはボイスクローンのテストです。",
+                    lines=4,
+                    info="最初は短め（1〜2 文）で試すと成功しやすいです。",
+                )
+                with gr.Row():
+                    target_language = gr.Dropdown(
+                        label="読み上げ言語",
+                        choices=SUPPORTED_LANGUAGES,
+                        value=DEFAULT_LANGUAGE,
+                        interactive=True,
+                    )
+                    fill_target_text_button = gr.Button(
+                        "例文を入れて試す", size="sm", variant="secondary"
+                    )
 
-            reference_text = gr.Textbox(
-                label="2. 参照音声の文字起こし",
-                placeholder="例: おはようございます。今日は少しだけ自己紹介をします。",
-                lines=3,
-            )
-            fill_reference_text_button = gr.Button("参照テキストの例文を入れる")
-            transcribe_reference_button = gr.Button("参照音声を自動文字起こし")
-
-            target_text = gr.Textbox(
-                label="3. 読ませたい文章",
-                placeholder="例: こんにちは。これはボイスクローンのテストです。",
-                lines=4,
-            )
-            fill_target_text_button = gr.Button("読ませたい文章の例文を入れる")
-            target_language = gr.Dropdown(
-                label="4. 読ませる言語",
-                choices=SUPPORTED_LANGUAGES,
-                value=DEFAULT_LANGUAGE,
-                interactive=True,
-            )
-            transcription_backend = gr.Dropdown(
-                label="参照音声の文字起こし方式",
-                choices=TRANSCRIBE_BACKENDS,
-                value="自動選択",
-                interactive=True,
-            )
-
+            # ── ステップ④：生成 ────────────────────────────────
+            generate_button = gr.Button("④ 音声を生成する", variant="primary", size="lg")
             status = gr.Markdown(
-                "先に「参照素材を整える」で切り出し結果を確認できます。初回の音声生成はモデルの読み込みに少し時間がかかります。"
+                "① 参照音声 → ② 文字起こし → ③ 読ませたい文章 の順に入力して「④ 音声を生成する」を押してください。"
+                "　**初回はモデルの読み込みで 1〜2 分かかります。**"
             )
 
             output_audio = gr.Audio(
                 type="filepath",
-                label="5. 生成結果",
+                label="生成結果（ここで再生・ダウンロードできます）",
                 interactive=False,
             )
+            open_outputs_button = gr.Button("📁 出力フォルダを開く", size="sm")
 
-            with gr.Accordion("設定", open=False):
+            # ── 設定 ────────────────────────────────────────────
+            with gr.Accordion("⚙ 設定（モデルの変更など）", open=False):
                 settings_summary = gr.Markdown(build_settings_summary())
-                qwen_model_setting = gr.Dropdown(
-                    label="Qwen-TTS モデル",
-                    choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
-                    value=current_qwen_label(),
-                    interactive=True,
-                )
-                local_asr_setting = gr.Dropdown(
-                    label="ローカル faster-whisper モデル",
-                    choices=LOCAL_ASR_MODEL_CHOICES,
-                    value=APP_CONFIG.local_asr_model,
-                    interactive=True,
-                )
+                with gr.Row():
+                    qwen_model_setting = gr.Dropdown(
+                        label="Qwen-TTS モデル",
+                        choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
+                        value=current_qwen_label(),
+                        interactive=True,
+                        info="高精度 1.7B が品質重視。軽量 0.6B は速度重視。",
+                    )
+                    local_asr_setting = gr.Dropdown(
+                        label="ローカル faster-whisper モデル",
+                        choices=LOCAL_ASR_MODEL_CHOICES,
+                        value=APP_CONFIG.local_asr_model,
+                        interactive=True,
+                        info="small が精度とスピードのバランスが良いです。",
+                    )
                 save_settings_button = gr.Button("設定を保存")
                 save_settings_button.click(
                     fn=save_model_settings,
@@ -684,9 +783,24 @@ def build_app() -> gr.Blocks:
                     outputs=[settings_summary],
                 )
 
-            prepare_button = gr.Button("参照素材を整える")
-            generate_button = gr.Button("音声生成", variant="primary")
+            gr.Markdown(
+                """
+---
+### うまくいかないときのチェックリスト
 
+| 症状 | 対処 |
+|---|---|
+| 声が別人っぽい | 参照テキストを省略なく正確に入力する |
+| 声が不安定・割れる | 雑音の少ない 3〜30 秒の音声を使う |
+| 動画を入れたが反応しない | ffmpeg が必要です（`brew install ffmpeg`） |
+| 生成が極端に遅い | 一度再起動して、まず 1 文で試す |
+| 文字起こしが空になる | 別の素材を試すか、手入力に切り替える |
+
+> 参照素材は保存前にモノラル化・24 kHz 化・軽い音量調整を自動で行っています。
+                """
+            )
+
+            # ── イベントハンドラ ─────────────────────────────────
             prepare_button.click(
                 fn=prepare_reference_audio,
                 inputs=[reference_audio, reference_video, trim_start_sec, trim_end_sec, auto_trim_silence],
@@ -723,22 +837,7 @@ def build_app() -> gr.Blocks:
                 ],
                 outputs=[status, prepared_reference_audio, output_audio],
             )
-            open_outputs_button = gr.Button("出力フォルダを開く")
             open_outputs_button.click(fn=open_output_folder, outputs=[status])
-
-            gr.Markdown(
-                """
-                ### うまくいかないとき
-                - 動画を入れた場合は、音声を自動で取り出して参照音声に変換します。
-                - 先に「参照素材を整える」を押すと、切り出し結果を確認できます。
-                - 声が不安定なときは、雑音の少ない3秒以上の音声を使ってください。精度を上げたいなら30秒前後も有効です。
-                - 参照音声と参照テキストが少しでもズレると、別人っぽい声になりやすいです。
-                - 生成が極端に遅いときは、一度アプリを再起動してから短文で試してください。
-                - 参照素材は保存前にモノラル化・24kHz化・軽い音量調整を行っています。
-                - 参照テキストは、省略せずに実際の音声どおり入力してください。
-                - 最初は短い文で試すと成功しやすいです。
-                """
-            )
 
     return demo
 

@@ -27,7 +27,7 @@ hdiutil create \
   -volname "かんたんボイスクローン" \
   -srcfolder "$STAGE_DIR" \
   -ov \
-  -format UDZO \
+  -format UDBZ \
   "$DIST_DIR/$DMG_NAME"
 
 codesign --force --sign "$CODESIGN_IDENTITY" "$DIST_DIR/$DMG_NAME" >/dev/null 2>&1 || true

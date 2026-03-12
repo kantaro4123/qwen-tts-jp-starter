@@ -52,6 +52,9 @@ else:
 PY
 )
   echo ""
+  echo "初回セットアップでは、依存関係のインストールに加えてモデルの事前ダウンロードも行います。"
+  echo "通信状況によってはかなり時間がかかります。止まったように見えても、そのまま待ってください。"
+  echo "モデル事前ダウンロードをスキップしたい場合は、QWEN_TTS_PREFETCH_MODEL=0 ./setup.command を使ってください。"
   echo "選択された Qwen-TTS モデルを事前ダウンロードします: $SELECTED_MODEL_ID"
   python - <<PY
 import torch

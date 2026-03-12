@@ -103,9 +103,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         webView.loadHTMLString(
             """
             <html><body style="font-family:-apple-system; background:#f7f7f4; color:#264033; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
-            <div style="text-align:center; max-width:560px;">
-              <h1 style="font-size:32px; margin-bottom:12px;">かんたんボイスクローン</h1>
-              <p style="font-size:16px; line-height:1.7;">このアプリの中だけでセットアップと起動を進められます。<br>起動が終わると、この画面の中にアプリ本体が表示されます。</p>
+            <div style="text-align:center; max-width:580px; padding:0 24px;">
+              <h1 style="font-size:30px; margin-bottom:14px;">かんたんボイスクローン</h1>
+              <p style="font-size:15px; line-height:1.75; color:#3a5547;">
+                上のパネルで <strong>①セットアップ</strong> を押し、<br>
+                完了したら <strong>②起動</strong> を押してください。<br>
+                アプリが起動すると、ここに画面が表示されます。
+              </p>
             </div>
             </body></html>
             """,
@@ -123,9 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private func initialStatusMessage() -> String {
-        usesBundledRuntime
-        ? "内蔵ランタイム版です。モデルを選んで『初回セットアップ』を押してください。"
-        : "準備完了です。モデルを選んで『初回セットアップ』から始めてください。"
+        "まず ①セットアップ を押してください。終わったら ②起動 を押すとアプリが立ち上がります。"
     }
 
     private func buildWindow() {
@@ -167,8 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         asrPopup.target = self
         asrPopup.action = #selector(handleSelectionChange)
 
-        let qwenLabel = label("Qwen-TTS モデル", fontSize: 13, weight: .semibold)
-        let asrLabel = label("ローカルASR モデル", fontSize: 13, weight: .semibold)
+        let qwenLabel = label("Qwen-TTS モデル（音声品質）", fontSize: 13, weight: .semibold)
+        let asrLabel = label("音声認識モデル（文字起こし）", fontSize: 13, weight: .semibold)
         let qwenStack = NSStackView(views: [qwenLabel, qwenPopup])
         qwenStack.orientation = .vertical
         qwenStack.spacing = 6
@@ -183,13 +185,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         selectionRow.distribution = .fillEqually
         selectionRow.translatesAutoresizingMaskIntoConstraints = false
 
-        startButton = actionButton("起動", action: #selector(handleStart))
-        setupButton = actionButton("初回セットアップ", action: #selector(handleSetup))
-        updateButton = actionButton("更新", action: #selector(handleUpdate))
-        installASRButton = actionButton("ローカル文字起こしを追加", action: #selector(handleInstallASR))
-        helpButton = actionButton("READMEを開く", action: #selector(handleHelp))
+        let flowHint = wrappingLabel("はじめての方は ①セットアップ（初回のみ）→ ②起動 の順に進めてください。", fontSize: 13, weight: .regular)
+        flowHint.textColor = NSColor(calibratedRed: 0.18, green: 0.44, blue: 0.64, alpha: 1)
 
-        let buttonRow1 = NSStackView(views: [startButton, setupButton, updateButton])
+        startButton = actionButton("② 起動", action: #selector(handleStart))
+        setupButton = actionButton("① セットアップ", action: #selector(handleSetup))
+        updateButton = actionButton("更新確認", action: #selector(handleUpdate))
+        installASRButton = actionButton("音声認識を追加（任意）", action: #selector(handleInstallASR))
+        helpButton = actionButton("ヘルプを開く", action: #selector(handleHelp))
+
+        let buttonRow1 = NSStackView(views: [setupButton, startButton, updateButton])
         buttonRow1.orientation = .horizontal
         buttonRow1.spacing = 12
         buttonRow1.distribution = .fillEqually
@@ -202,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         buttonRow2.translatesAutoresizingMaskIntoConstraints = false
 
         let topCard = containerCard()
-        [heroTitle, heroBody, selectionRow, statusLabel, spinner, buttonRow1, buttonRow2].forEach {
+        [heroTitle, heroBody, flowHint, selectionRow, statusLabel, spinner, buttonRow1, buttonRow2].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             topCard.addSubview($0)
         }
@@ -248,7 +253,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             topCard.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             topCard.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             topCard.topAnchor.constraint(equalTo: root.topAnchor),
-            topCard.heightAnchor.constraint(equalToConstant: 270),
 
             heroTitle.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
             heroTitle.topAnchor.constraint(equalTo: topCard.topAnchor, constant: 22),
@@ -257,9 +261,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             heroBody.topAnchor.constraint(equalTo: heroTitle.bottomAnchor, constant: 10),
             heroBody.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
 
+            flowHint.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
+            flowHint.topAnchor.constraint(equalTo: heroBody.bottomAnchor, constant: 8),
+            flowHint.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
+
             selectionRow.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
             selectionRow.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
-            selectionRow.topAnchor.constraint(equalTo: heroBody.bottomAnchor, constant: 14),
+            selectionRow.topAnchor.constraint(equalTo: flowHint.bottomAnchor, constant: 10),
             selectionRow.heightAnchor.constraint(equalToConstant: 56),
 
             statusLabel.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
@@ -278,6 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             buttonRow2.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
             buttonRow2.topAnchor.constraint(equalTo: buttonRow1.bottomAnchor, constant: 10),
             buttonRow2.heightAnchor.constraint(equalToConstant: 38),
+            buttonRow2.bottomAnchor.constraint(equalTo: topCard.bottomAnchor, constant: -22),
 
             webCard.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             webCard.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -709,8 +718,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             guard let self else { return }
             guard self.isSetupComplete() else {
                 let alert = NSAlert()
-                alert.messageText = "まだセットアップされていません"
-                alert.informativeText = "最初に『初回セットアップ』を実行してください。"
+                alert.messageText = "セットアップが済んでいません"
+                alert.informativeText = "先に ①セットアップ を実行してください。"
                 alert.alertStyle = .warning
                 alert.runModal()
                 return
@@ -827,7 +836,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     @objc private func handleSelectionChange() {
         persistSelectionDefaults()
-        updateStatus("選択中: \(selectedQwenModelID()) / ASR \(selectedASRModel())")
+        let qwenLabelText = qwenOptions[max(0, qwenPopup.indexOfSelectedItem)].label
+        updateStatus("選択中: \(qwenLabelText)  /  ASR: \(selectedASRModel())")
     }
 
     @objc private func handleStart() {
@@ -840,13 +850,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             return
         }
 
-        updateStatus("初回セットアップを始めます。数分かかることがあります。")
-        appendLog("初回セットアップを開始します。")
+        updateStatus("セットアップを始めます。初回は数分かかることがあります。")
+        appendLog("セットアップを開始します。")
         runShellScript("setup.command") { [weak self] code in
             if code == 0 {
-                self?.updateStatus("初回セットアップが終わりました。次は『起動』を押してください。")
+                self?.updateStatus("セットアップ完了です。②起動 を押してください。")
             } else {
-                self?.updateStatus("初回セットアップに失敗しました。ログを確認してください。")
+                self?.updateStatus("セットアップに失敗しました。下のログを確認してください。")
             }
         }
     }
