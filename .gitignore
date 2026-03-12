@@ -5,3 +5,5 @@ __pycache__/
 tmp/
 outputs/
 .gradio/
+build/
+dist/

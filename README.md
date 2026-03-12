@@ -274,6 +274,17 @@ ffmpeg -version
 - `app.py` の文言を変えるだけでも、日本語UIはかなり調整できます
 - `QWEN_TTS_MODEL_ID` 環境変数で別モデルに差し替えられます
 
+## macOS アプリ化 / DMG 化
+
+このリポジトリには、macOS 向けのランチャー `.app` と `.dmg` を作るための下地も入っています。
+
+```bash
+./scripts/build_launcher_app.sh
+./scripts/build_dmg.sh
+```
+
+詳しくは [docs/dmg-packaging.md](docs/dmg-packaging.md) を見てください。
+
 ## GitHub に公開する流れ
 
 ```bash
