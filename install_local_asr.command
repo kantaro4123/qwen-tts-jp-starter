@@ -13,4 +13,4 @@ source .venv/bin/activate
 python -m pip install faster-whisper
 
 echo ""
-echo "ローカル文字起こし用の faster-whisper をインストールしました。"
+echo "ローカル文字起こし用の faster-whisper を再インストールしました。"

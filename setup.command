@@ -72,4 +72,5 @@ fi
 echo ""
 echo "セットアップが完了しました。"
 echo "使用した Python: $PYTHON_BIN"
+echo "ローカル文字起こし用の faster-whisper もインストール済みです。"
 echo "次は run.command を実行してください。"
