@@ -22,6 +22,8 @@ DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
 DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
 DEFAULT_GENERATION_KWARGS = {}
+TARGET_REFERENCE_SAMPLE_RATE = 24000
+TARGET_REFERENCE_DBFS = -20.0
 
 
 @dataclass
@@ -82,6 +84,15 @@ def save_reference_audio(audio: AudioSegment) -> str:
     os.close(fd)
     audio.export(temp_path, format="wav")
     return temp_path
+
+
+def standardize_reference_audio(audio: AudioSegment) -> AudioSegment:
+    standardized = audio.set_channels(1).set_frame_rate(TARGET_REFERENCE_SAMPLE_RATE)
+    if standardized.dBFS != float("-inf"):
+        gain = TARGET_REFERENCE_DBFS - standardized.dBFS
+        gain = max(-12.0, min(12.0, gain))
+        standardized = standardized.apply_gain(gain)
+    return standardized
 
 
 def format_duration(milliseconds: int) -> str:
@@ -186,6 +197,7 @@ def build_reference_audio(
     prepared = audio[start_ms:end_ms]
     if auto_trim_silence:
         prepared = auto_trim_audio(prepared)
+    prepared = standardize_reference_audio(prepared)
 
     if len(prepared) == 0:
         raise ValueError("切り出した結果が空になりました。切り出し範囲を見直してください。")
@@ -201,6 +213,7 @@ def build_reference_audio(
     if notes:
         status_lines.append("チェック結果:")
         status_lines.extend(f"- {note}" for note in notes)
+    status_lines.append("- 保存前にモノラル化・24kHz化・軽い音量調整を行っています。")
     status = "\n".join(status_lines)
     return status, output_path
 
@@ -428,6 +441,7 @@ def build_app() -> gr.Blocks:
                 - 声が不安定なときは、雑音の少ない3秒以上の音声を使ってください。精度を上げたいなら30秒前後も有効です。
                 - 参照音声と参照テキストが少しでもズレると、別人っぽい声になりやすいです。
                 - 生成が極端に遅いときは、一度アプリを再起動してから短文で試してください。
+                - 参照素材は保存前にモノラル化・24kHz化・軽い音量調整を行っています。
                 - 参照テキストは、省略せずに実際の音声どおり入力してください。
                 - 最初は短い文で試すと成功しやすいです。
                 """
