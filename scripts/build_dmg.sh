@@ -8,6 +8,7 @@ STAGE_DIR="$BUILD_DIR/dmg-stage"
 DIST_DIR="$PROJECT_DIR/dist"
 APP_NAME="かんたんボイスクローン.app"
 DMG_NAME="qwen-tts-jp-starter-macos.dmg"
+WELCOME_FILE="$PROJECT_DIR/macos/はじめに.txt"
 
 "$SCRIPT_DIR/build_launcher_app.sh"
 
@@ -24,12 +25,13 @@ rsync -a \
   "$PROJECT_DIR/" "$STAGE_DIR/qwen-tts-jp-starter/"
 
 cp -R "$BUILD_DIR/macos-launcher/$APP_NAME" "$STAGE_DIR/qwen-tts-jp-starter/$APP_NAME"
+cp "$WELCOME_FILE" "$STAGE_DIR/はじめに.txt"
 
 mkdir -p "$DIST_DIR"
 rm -f "$DIST_DIR/$DMG_NAME"
 
 hdiutil create \
-  -volname "qwen-tts-jp-starter" \
+  -volname "かんたんボイスクローン" \
   -srcfolder "$STAGE_DIR" \
   -ov \
   -format UDZO \

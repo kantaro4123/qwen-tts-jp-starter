@@ -71,6 +71,14 @@ if [ "$ACTION" = "update" ]; then
   exit 0
 fi
 
+if [ "$ACTION" = "install-local-asr" ]; then
+  osascript -e 'display dialog "ローカル文字起こしを追加します。初回は数分かかることがあります。" buttons {"OK"} default button "OK"' || true
+  echo "ローカル文字起こしを追加します..."
+  ./install_local_asr.command
+  osascript -e 'display notification "ローカル文字起こしの追加が終わりました。" with title "かんたんボイスクローン"' || true
+  exit 0
+fi
+
 if [ ! -d ".venv" ]; then
   choose_models
   osascript -e 'display dialog "初回セットアップを始めます。数分かかることがあります。" buttons {"OK"} default button "OK"' || true

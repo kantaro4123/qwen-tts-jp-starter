@@ -496,6 +496,24 @@ def save_model_settings(qwen_model_label: str, local_asr_model: str) -> str:
     )
 
 
+def local_asr_installed() -> bool:
+    try:
+        import faster_whisper  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def build_settings_summary() -> str:
+    installed = "インストール済み" if local_asr_installed() else "未インストール"
+    return (
+        "### 現在の設定\n"
+        f"- Qwen-TTS: `{current_qwen_label()}`\n"
+        f"- ローカルASR: `{APP_CONFIG.local_asr_model}`\n"
+        f"- faster-whisper: `{installed}`\n"
+    )
+
+
 CSS = """
     :root {
       --page-bg: linear-gradient(135deg, #f6efe7 0%, #f2f8f2 55%, #eef6ff 100%);
@@ -619,6 +637,7 @@ def build_app() -> gr.Blocks:
             )
 
             with gr.Accordion("設定", open=False):
+                settings_summary = gr.Markdown(build_settings_summary())
                 qwen_model_setting = gr.Dropdown(
                     label="Qwen-TTS モデル",
                     choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
@@ -636,6 +655,10 @@ def build_app() -> gr.Blocks:
                     fn=save_model_settings,
                     inputs=[qwen_model_setting, local_asr_setting],
                     outputs=[status],
+                )
+                save_settings_button.click(
+                    fn=build_settings_summary,
+                    outputs=[settings_summary],
                 )
 
             prepare_button = gr.Button("参照素材を整える")
