@@ -26,6 +26,12 @@
 ./scripts/build_dmg.sh
 ```
 
+標準の `1.7B` 同梱版を配るなら、次のプリセットが最短です。
+
+```bash
+./scripts/build_release_1_7b.sh
+```
+
 ## できあがる場所
 
 - `.app`: `build/macos-launcher/かんたんボイスクローン.app`

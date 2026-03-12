@@ -38,6 +38,20 @@ export MACOS_APP_SPECIFIC_PASSWORD="app-specific-password"
 
 ## モデル同梱つきビルド
 
+標準の `1.7B` 同梱版を作るだけなら、次がいちばん簡単です。
+
+```bash
+./scripts/build_release_1_7b.sh
+```
+
+GitHub Release まで含めて作るなら:
+
+```bash
+git tag -f v0.x.y
+git push origin v0.x.y --force
+./scripts/release_1_7b.sh v0.x.y docs/releases/v0.x.y.md
+```
+
 ### すでにローカルにモデルがある場合
 
 ```bash

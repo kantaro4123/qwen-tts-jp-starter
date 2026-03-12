@@ -379,6 +379,7 @@ ffmpeg -version
 
 詳しくは [docs/dmg-packaging.md](docs/dmg-packaging.md) を見てください。
 署名・公証・モデル同梱ビルドまで進めたい場合は [docs/signing-notarization.md](docs/signing-notarization.md) を見てください。
+標準の `1.7B` 同梱版を公開したいときは [docs/release-checklist.md](docs/release-checklist.md) の流れが最短です。
 
 ## 自動文字起こしについて
 
