@@ -1186,6 +1186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("kantan-update-\(UUID().uuidString).sh")
         let source = appURL.path.replacingOccurrences(of: "'", with: "'\\''")
         let target = targetAppURL.path.replacingOccurrences(of: "'", with: "'\\''")
+        let adminCommand = "/bin/rm -rf '\(target)'; /usr/bin/ditto '\(source)' '\(target)'; /usr/bin/xattr -dr com.apple.quarantine '\(target)' >/dev/null 2>&1 || true; /usr/bin/open '\(target)'"
+            .replacingOccurrences(of: "\"", with: "\\\"")
 
         let script = [
             "#!/bin/zsh",
@@ -1200,7 +1202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             "  /usr/bin/xattr -dr com.apple.quarantine \"$DST\" >/dev/null 2>&1 || true",
             "  /usr/bin/open \"$DST\"",
             "else",
-            "  /usr/bin/osascript -e 'do shell script \"/bin/rm -rf \\\"$DST\\\"; /usr/bin/ditto \\\"$SRC\\\" \\\"$DST\\\"; /usr/bin/xattr -dr com.apple.quarantine \\\"$DST\\\" >/dev/null 2>&1 || true; /usr/bin/open \\\"$DST\\\"\" with administrator privileges'",
+            "  /usr/bin/osascript -e \"do shell script \\\"\(adminCommand)\\\" with administrator privileges\"",
             "fi",
         ].joined(separator: "\n")
 
