@@ -84,6 +84,37 @@ def save_reference_audio(audio: AudioSegment) -> str:
     return temp_path
 
 
+def format_duration(milliseconds: int) -> str:
+    return f"{milliseconds / 1000:.1f}秒"
+
+
+def analyze_reference_audio(audio: AudioSegment) -> list[str]:
+    notes: list[str] = []
+    duration_ms = len(audio)
+    if duration_ms < 3000:
+        notes.append("短すぎます。3秒以上ある方が安定しやすいです。")
+    elif duration_ms < 8000:
+        notes.append("使えますが、精度を上げたいなら 8〜15 秒くらいも試してください。")
+    elif duration_ms <= 30000:
+        notes.append("長さはかなり良いです。")
+    else:
+        notes.append("少し長めです。必要な部分だけに切ると安定しやすいです。")
+
+    if audio.dBFS == float("-inf"):
+        notes.append("ほぼ無音です。別の素材を使ってください。")
+    elif audio.dBFS < -32:
+        notes.append("音量が小さめです。はっきり聞こえる素材の方が良いです。")
+
+    regions = detect_nonsilent(audio, min_silence_len=200, silence_thresh=max(audio.dBFS - 16, -50))
+    spoken_ms = sum((end - start) for start, end in regions) if regions else 0
+    if duration_ms > 0:
+        silence_ratio = 1 - (spoken_ms / duration_ms)
+        if silence_ratio > 0.45:
+            notes.append("無音が多めです。切り出しや自動無音カットが有効です。")
+
+    return notes
+
+
 def ensure_ffmpeg() -> None:
     if shutil.which("ffmpeg") is None:
         raise RuntimeError(
@@ -161,7 +192,16 @@ def build_reference_audio(
 
     output_path = save_reference_audio(prepared)
     duration_sec = len(prepared) / 1000
-    status = f"参照素材を整えました。元の入力: {source_label} / 長さ: {duration_sec:.1f}秒"
+    notes = analyze_reference_audio(prepared)
+    status_lines = [
+        "参照素材を整えました。",
+        f"元の入力: {source_label}",
+        f"長さ: {duration_sec:.1f}秒",
+    ]
+    if notes:
+        status_lines.append("チェック結果:")
+        status_lines.extend(f"- {note}" for note in notes)
+    status = "\n".join(status_lines)
     return status, output_path
 
 
@@ -228,6 +268,20 @@ def generate_voice_clone(
         "生成できました。下のプレイヤーで確認して、必要なら wav ファイルとして保存してください。"
     )
     return message, resolved_reference_audio, output_path
+
+
+def fill_reference_text_example() -> str:
+    return "おはようございます。今日は少しだけ自己紹介をします。"
+
+
+def fill_target_text_example() -> str:
+    return "こんにちは。これはボイスクローンのテストです。"
+
+
+def open_output_folder() -> str:
+    DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["open", str(DEFAULT_OUTPUT_DIR.resolve())], check=False)
+    return f"出力フォルダを開きました: {DEFAULT_OUTPUT_DIR.resolve()}"
 
 
 CSS = """
@@ -320,12 +374,14 @@ def build_app() -> gr.Blocks:
                 placeholder="例: おはようございます。今日は少しだけ自己紹介をします。",
                 lines=3,
             )
+            fill_reference_text_button = gr.Button("参照テキストの例文を入れる")
 
             target_text = gr.Textbox(
                 label="3. 読ませたい文章",
                 placeholder="例: こんにちは。これはボイスクローンのテストです。",
                 lines=4,
             )
+            fill_target_text_button = gr.Button("読ませたい文章の例文を入れる")
 
             status = gr.Markdown(
                 "先に「参照素材を整える」で切り出し結果を確認できます。初回の音声生成はモデルの読み込みに少し時間がかかります。"
@@ -345,6 +401,8 @@ def build_app() -> gr.Blocks:
                 inputs=[reference_audio, reference_video, trim_start_sec, trim_end_sec, auto_trim_silence],
                 outputs=[status, prepared_reference_audio, prepared_reference_state],
             )
+            fill_reference_text_button.click(fn=fill_reference_text_example, outputs=[reference_text])
+            fill_target_text_button.click(fn=fill_target_text_example, outputs=[target_text])
             generate_button.click(
                 fn=generate_voice_clone,
                 inputs=[
@@ -359,6 +417,8 @@ def build_app() -> gr.Blocks:
                 ],
                 outputs=[status, prepared_reference_audio, output_audio],
             )
+            open_outputs_button = gr.Button("出力フォルダを開く")
+            open_outputs_button.click(fn=open_output_folder, outputs=[status])
 
             gr.Markdown(
                 """
