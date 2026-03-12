@@ -502,18 +502,19 @@ def build_settings_summary() -> str:
 
 CSS = """
     :root {
-      --page-bg: radial-gradient(circle at top left, #fff4e8 0%, #f4fbf6 42%, #eef5ff 100%);
+      --page-bg: linear-gradient(180deg, #f6f4ee 0%, #eef2eb 100%);
       --card-bg: rgba(255, 255, 255, 0.88);
-      --card-strong: rgba(255, 255, 255, 0.96);
-      --card-border: rgba(47, 76, 63, 0.12);
-      --headline: #1d2c24;
-      --body: #355045;
-      --muted: #6c8376;
-      --accent: #2f7a53;
-      --accent-soft: rgba(47, 122, 83, 0.1);
-      --accent-2: #ca6a3d;
-      --warning-bg: rgba(202, 106, 61, 0.08);
-      --shadow: 0 20px 55px rgba(31, 50, 40, 0.08);
+      --card-strong: rgba(255, 255, 255, 0.97);
+      --card-border: rgba(23, 31, 27, 0.08);
+      --headline: #18211d;
+      --body: #31413a;
+      --muted: #6f7c75;
+      --accent: #1d6b49;
+      --accent-soft: rgba(29, 107, 73, 0.08);
+      --accent-2: #db6f2d;
+      --warning-bg: rgba(219, 111, 45, 0.08);
+      --shadow: 0 22px 48px rgba(29, 38, 32, 0.07);
+      --shadow-soft: 0 10px 24px rgba(29, 38, 32, 0.04);
     }
 
     body, .gradio-container {
@@ -523,9 +524,9 @@ CSS = """
     }
 
     .gradio-container {
-      max-width: 1320px !important;
+      max-width: 1480px !important;
       margin: 0 auto !important;
-      padding: 20px 18px 28px !important;
+      padding: 16px 18px 26px !important;
     }
 
     footer,
@@ -540,72 +541,93 @@ CSS = """
     }
 
     .app-shell {
-      gap: 16px;
+      gap: 14px;
     }
 
     .hero {
-      background: linear-gradient(145deg, rgba(255,255,255,0.95), rgba(248, 252, 249, 0.88));
+      background:
+        radial-gradient(circle at top right, rgba(29, 107, 73, 0.10) 0%, transparent 34%),
+        linear-gradient(160deg, rgba(255,255,255,0.98), rgba(252,253,251,0.92));
       border: 1px solid var(--card-border);
-      border-radius: 28px;
-      padding: 30px 32px;
+      border-radius: 30px;
+      padding: 18px 20px 16px;
       box-shadow: var(--shadow);
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .hero-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
-      gap: 22px;
+      grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.82fr);
+      gap: 16px;
       align-items: start;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(24, 33, 29, 0.06);
+      color: var(--headline);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 14px;
     }
 
     .hero h1 {
       color: var(--headline);
-      font-size: 2.45rem;
-      line-height: 1.08;
+      font-size: 2.15rem;
+      line-height: 0.98;
       margin: 0 0 10px;
       letter-spacing: -0.02em;
+      max-width: 9ch;
     }
 
     .hero p, .hero li {
       color: var(--body);
-      line-height: 1.7;
+      line-height: 1.68;
       margin: 0;
     }
 
     .hero-lead {
-      font-size: 1.02rem;
-      margin-bottom: 14px !important;
+      font-size: 0.96rem;
+      margin-bottom: 10px !important;
+      max-width: 56ch;
     }
 
     .hero-note {
-      margin-top: 16px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: var(--warning-bg);
-      border: 1px solid rgba(202, 106, 61, 0.16);
+      padding: 13px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(23, 31, 27, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow-soft);
       font-size: 0.92rem;
+      margin-bottom: 0;
+      background: var(--warning-bg);
+      border-color: rgba(219, 111, 45, 0.15);
     }
 
     .hero-side {
-      display: grid;
-      gap: 12px;
+      display: block;
     }
 
     .summary-card {
       background: var(--card-strong);
       border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 18px 18px 16px;
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: var(--shadow-soft);
     }
 
     .summary-title {
-      font-size: 0.84rem;
+      font-size: 0.78rem;
       font-weight: 700;
       color: var(--muted);
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      margin-bottom: 12px;
+      margin-bottom: 11px;
     }
 
     .steps-overview {
@@ -636,14 +658,14 @@ CSS = """
     .step-line strong {
       display: block;
       color: var(--headline);
-      margin-bottom: 2px;
-      font-size: 0.97rem;
+      margin-bottom: 4px;
+      font-size: 0.96rem;
     }
 
     .step-line span {
       color: var(--muted);
-      font-size: 0.88rem;
-      line-height: 1.55;
+      font-size: 0.85rem;
+      line-height: 1.5;
     }
 
     .quick-facts {
@@ -651,35 +673,39 @@ CSS = """
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(23, 31, 27, 0.06);
     }
 
     .fact-pill {
-      padding: 11px 12px;
-      border-radius: 14px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 0.87rem;
+      padding: 12px 12px;
+      border-radius: 16px;
+      background: rgba(24, 33, 29, 0.04);
+      color: var(--headline);
+      font-size: 0.85rem;
       font-weight: 600;
       text-align: center;
+      border: 1px solid rgba(23, 31, 27, 0.05);
     }
 
     .main-tabs {
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
     .main-tabs > .tab-nav {
       gap: 10px;
       border-bottom: none !important;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .main-tabs > .tab-nav button {
       border-radius: 999px !important;
-      border: 1px solid rgba(47, 122, 83, 0.18) !important;
-      background: rgba(255,255,255,0.72) !important;
+      border: 1px solid rgba(23, 31, 27, 0.08) !important;
+      background: rgba(255,255,255,0.74) !important;
       color: var(--body) !important;
       padding: 10px 18px !important;
       font-weight: 700 !important;
+      box-shadow: none !important;
     }
 
     .main-tabs > .tab-nav button.selected {
@@ -690,7 +716,7 @@ CSS = """
 
     .surface-card {
       border: 1px solid var(--card-border) !important;
-      border-radius: 24px !important;
+      border-radius: 26px !important;
       background: var(--card-bg) !important;
       box-shadow: var(--shadow) !important;
       padding: 18px !important;
@@ -701,12 +727,22 @@ CSS = """
       align-items: stretch;
     }
 
+    .workflow-main, .workflow-side {
+      gap: 0;
+    }
+
+    .workflow-side {
+      position: sticky;
+      top: 12px;
+      align-self: start;
+    }
+
     .step-card {
       border: 1px solid var(--card-border) !important;
-      border-radius: 20px !important;
-      padding: 18px !important;
+      border-radius: 22px !important;
+      padding: 20px !important;
       background: var(--card-strong) !important;
-      box-shadow: 0 8px 24px rgba(33, 49, 42, 0.04) !important;
+      box-shadow: var(--shadow-soft) !important;
       margin: 0 0 14px !important;
     }
 
@@ -735,7 +771,7 @@ CSS = """
     .step-title {
       display: block;
       color: var(--headline);
-      font-size: 1.05rem;
+      font-size: 1.1rem;
       font-weight: 700;
       margin-bottom: 4px;
     }
@@ -743,19 +779,19 @@ CSS = """
     .step-desc {
       display: block;
       color: var(--muted);
-      font-size: 0.87rem;
+      font-size: 0.85rem;
       line-height: 1.55;
     }
 
     .card-caption {
       color: var(--muted);
-      font-size: 0.88rem;
-      margin: -6px 0 10px;
+      font-size: 0.85rem;
+      margin: -3px 0 10px;
     }
 
     .transcribe-spotlight {
-      background: linear-gradient(135deg, rgba(47, 122, 83, 0.12), rgba(40, 98, 145, 0.08));
-      border: 1px solid rgba(47, 122, 83, 0.14);
+      background: linear-gradient(135deg, rgba(29, 107, 73, 0.12), rgba(255, 255, 255, 0.5));
+      border: 1px solid rgba(29, 107, 73, 0.14);
       border-radius: 18px;
       padding: 16px;
       margin-bottom: 14px;
@@ -777,9 +813,9 @@ CSS = """
 
     .status-panel, .output-panel, .side-card {
       border: 1px solid var(--card-border) !important;
-      border-radius: 20px !important;
+      border-radius: 22px !important;
       background: var(--card-strong) !important;
-      box-shadow: 0 8px 24px rgba(33, 49, 42, 0.04) !important;
+      box-shadow: var(--shadow-soft) !important;
       padding: 18px !important;
       margin-bottom: 14px !important;
     }
@@ -787,8 +823,29 @@ CSS = """
     .panel-title {
       color: var(--headline);
       font-weight: 700;
-      font-size: 1rem;
-      margin-bottom: 10px;
+      font-size: 1.05rem;
+      margin-bottom: 12px;
+    }
+
+    .status-highlight {
+      border-radius: 16px;
+      padding: 13px 14px;
+      background: rgba(24, 33, 29, 0.04);
+      border: 1px solid rgba(23, 31, 27, 0.06);
+      margin-bottom: 12px;
+    }
+
+    .status-highlight strong {
+      display: block;
+      color: var(--headline);
+      margin-bottom: 4px;
+      font-size: 0.94rem;
+    }
+
+    .status-highlight span {
+      color: var(--body);
+      font-size: 0.88rem;
+      line-height: 1.55;
     }
 
     .hint-list {
@@ -799,8 +856,8 @@ CSS = """
     .hint-item {
       border-radius: 16px;
       padding: 14px 15px;
-      background: rgba(47, 122, 83, 0.06);
-      border: 1px solid rgba(47, 122, 83, 0.1);
+      background: rgba(24, 33, 29, 0.04);
+      border: 1px solid rgba(23, 31, 27, 0.06);
     }
 
     .hint-item strong {
@@ -826,9 +883,9 @@ CSS = """
       display: block;
       text-decoration: none;
       color: var(--accent);
-      background: rgba(47, 122, 83, 0.08);
-      border: 1px solid rgba(47, 122, 83, 0.14);
-      border-radius: 15px;
+      background: rgba(29, 107, 73, 0.08);
+      border: 1px solid rgba(29, 107, 73, 0.12);
+      border-radius: 16px;
       padding: 13px 14px;
       font-weight: 700;
     }
@@ -847,14 +904,85 @@ CSS = """
       margin-bottom: 14px;
     }
 
+    .settings-grid, .help-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 14px;
+    }
+
+    .mini-card {
+      border: 1px solid var(--card-border);
+      border-radius: 22px;
+      background: var(--card-strong);
+      box-shadow: var(--shadow-soft);
+      padding: 18px;
+      height: 100%;
+    }
+
+    .mini-card h3 {
+      margin: 0 0 8px;
+      color: var(--headline);
+      font-size: 1rem;
+    }
+
+    .mini-card p {
+      margin: 0;
+      color: var(--body);
+      line-height: 1.65;
+      font-size: 0.9rem;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .mini-list div {
+      border-radius: 14px;
+      background: rgba(29, 107, 73, 0.06);
+      padding: 11px 12px;
+      color: var(--body);
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+
     .gradio-button.primary, .gradio-button.secondary {
       border-radius: 14px !important;
       font-weight: 700 !important;
+      min-height: 46px !important;
+    }
+
+    .gradio-button.primary {
+      background: var(--accent) !important;
+      border-color: var(--accent) !important;
+    }
+
+    .gradio-button.secondary {
+      background: rgba(24, 33, 29, 0.04) !important;
+      border-color: rgba(23, 31, 27, 0.08) !important;
+      color: var(--headline) !important;
+    }
+
+    .gr-box, .gr-form, .gr-group {
+      border: none !important;
+    }
+
+    textarea, input, .wrap, .gradio-dropdown {
+      border-radius: 14px !important;
     }
 
     @media (max-width: 1100px) {
       .hero-grid {
         grid-template-columns: 1fr;
+      }
+
+      .settings-grid, .help-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .workflow-side {
+        position: static;
       }
     }
 
@@ -872,7 +1000,11 @@ CSS = """
       }
 
       .hero {
-        padding: 22px 18px;
+        padding: 20px 18px;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
       }
     }
 """
@@ -888,21 +1020,19 @@ def build_app() -> gr.Blocks:
                 <section class="hero">
                   <div class="hero-grid">
                     <div>
+                      <div class="eyebrow">ローカル完結 / Qwen-TTS / 初心者向け</div>
                       <h1>かんたんボイスクローン</h1>
-                      <p class="hero-lead">Qwen-TTS を日本語で迷わず使うための、初心者向けローカルアプリです。まずは左側で声の素材を整え、右側で文字と生成結果を確認してください。</p>
+                      <p class="hero-lead">Qwen-TTS を日本語で迷わず使うためのローカルアプリです。左で素材を整え、右で文章入力と生成結果の確認まで一気に進められます。</p>
                       <div class="hero-note">このアプリは話者をなるべく寄せますが、完全に同じ声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</div>
                     </div>
                     <div class="hero-side">
                       <div class="summary-card">
                         <div class="summary-title">最短 3 ステップ</div>
                         <div class="steps-overview">
-                          <div class="step-line"><span class="step-badge">1</span><div><strong>素材を入れる</strong><span>音声か動画をアップロードして、必要なら前後を切ります。</span></div></div>
-                          <div class="step-line"><span class="step-badge">2</span><div><strong>文字起こしを整える</strong><span>自動文字起こしを押して、内容が合っているかだけ確認します。</span></div></div>
-                          <div class="step-line"><span class="step-badge">3</span><div><strong>読ませたい文章を生成</strong><span>短い文から試して、良ければそのまま保存します。</span></div></div>
+                          <div class="step-line"><span class="step-badge">1</span><div><strong>素材を入れる</strong><span>音声か動画をアップロードし、必要なら前後を切ります。</span></div></div>
+                          <div class="step-line"><span class="step-badge">2</span><div><strong>文字起こしを整える</strong><span>自動文字起こしを押し、内容が合っているかだけ見直します。</span></div></div>
+                          <div class="step-line"><span class="step-badge">3</span><div><strong>文章を読ませる</strong><span>短い文から試して、良ければそのまま保存します。</span></div></div>
                         </div>
-                      </div>
-                      <div class="summary-card">
-                        <div class="summary-title">先に知っておくこと</div>
                         <div class="quick-facts">
                           <div class="fact-pill">参照音声は 3 秒以上</div>
                           <div class="fact-pill">最初は 1〜2 文で試す</div>
@@ -920,7 +1050,7 @@ def build_app() -> gr.Blocks:
                 with gr.Tab("音声生成"):
                     with gr.Group(elem_classes=["surface-card"]):
                         with gr.Row(elem_classes=["workflow-grid"]):
-                            with gr.Column(scale=7, min_width=520):
+                            with gr.Column(scale=7, min_width=560, elem_classes=["workflow-main"]):
                                 with gr.Group(elem_classes=["step-card"]):
                                     gr.HTML(
                                         '<div class="step-header">'
@@ -1000,7 +1130,7 @@ def build_app() -> gr.Blocks:
                                         "例文を入れて試す", size="sm", variant="secondary"
                                     )
 
-                            with gr.Column(scale=5, min_width=400):
+                            with gr.Column(scale=5, min_width=420, elem_classes=["workflow-side"]):
                                 with gr.Group(elem_classes=["step-card"]):
                                     gr.HTML(
                                         '<div class="step-header">'
@@ -1029,6 +1159,12 @@ def build_app() -> gr.Blocks:
 
                                 with gr.Group(elem_classes=["status-panel"]):
                                     gr.HTML('<div class="panel-title">現在の状況</div>')
+                                    gr.HTML(
+                                        '<div class="status-highlight">'
+                                        '<strong>まずは左から順番に進めてください</strong>'
+                                        '<span>素材を整えてから文字起こしを確認すると、声の再現性が上がりやすくなります。</span>'
+                                        '</div>'
+                                    )
                                     status = gr.Markdown(
                                         "左側で素材を整えたあと、\n"
                                         "1. 自動文字起こし\n"
@@ -1060,45 +1196,71 @@ def build_app() -> gr.Blocks:
 
                 with gr.Tab("設定"):
                     with gr.Group(elem_classes=["surface-card"]):
-                        gr.HTML('<div class="panel-title">モデル設定</div>')
-                        settings_summary = gr.Markdown(
-                            build_settings_summary(), elem_classes=["settings-note"]
-                        )
-                        with gr.Row():
-                            qwen_model_setting = gr.Dropdown(
-                                label="Qwen-TTS モデル",
-                                choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
-                                value=current_qwen_label(),
-                                interactive=True,
-                                info="高精度 1.7B は品質重視、軽量 0.6B は軽さ重視です。",
-                            )
-                            local_asr_setting = gr.Dropdown(
-                                label="ローカル文字起こしモデル",
-                                choices=LOCAL_ASR_MODEL_CHOICES,
-                                value=APP_CONFIG.local_asr_model,
-                                interactive=True,
-                                info="small が標準です。base は軽く、medium は少し高精度です。",
-                            )
-                        save_settings_button = gr.Button("設定を保存する", variant="primary")
-                        settings_status = gr.Markdown("ここで保存した設定は、次の生成から反映されます。")
+                        gr.HTML('<div class="panel-title">設定</div>')
+                        with gr.Row(elem_classes=["settings-grid"]):
+                            with gr.Column():
+                                settings_summary = gr.Markdown(
+                                    build_settings_summary(), elem_classes=["settings-note"]
+                                )
+                                qwen_model_setting = gr.Dropdown(
+                                    label="Qwen-TTS モデル",
+                                    choices=list(QWEN_TTS_MODEL_CHOICES.keys()),
+                                    value=current_qwen_label(),
+                                    interactive=True,
+                                    info="高精度 1.7B は品質重視、軽量 0.6B は軽さ重視です。",
+                                )
+                                local_asr_setting = gr.Dropdown(
+                                    label="ローカル文字起こしモデル",
+                                    choices=LOCAL_ASR_MODEL_CHOICES,
+                                    value=APP_CONFIG.local_asr_model,
+                                    interactive=True,
+                                    info="small が標準です。base は軽く、medium は少し高精度です。",
+                                )
+                                save_settings_button = gr.Button("設定を保存する", variant="primary")
+                                settings_status = gr.Markdown("ここで保存した設定は、次の生成から反映されます。")
+                            with gr.Column():
+                                gr.HTML(
+                                    """
+                                    <div class="mini-card">
+                                      <h3>おすすめの選び方</h3>
+                                      <p>迷ったら `高精度 1.7B` と `small` のままで大丈夫です。処理が重いと感じたときだけ軽いモデルへ切り替えてください。</p>
+                                      <div class="mini-list">
+                                        <div><strong>音質を優先</strong><br>Qwen-TTS は `高精度 1.7B`</div>
+                                        <div><strong>軽さを優先</strong><br>Qwen-TTS は `軽量 0.6B`</div>
+                                        <div><strong>文字起こしの標準</strong><br>`small` が一番バランス良好</div>
+                                      </div>
+                                    </div>
+                                    """
+                                )
 
                 with gr.Tab("ヘルプ"):
                     with gr.Group(elem_classes=["surface-card"]):
-                        gr.HTML(
-                            """
-                            <div class="panel-title">困ったときの見直しポイント</div>
-                            <div class="hint-list">
-                              <div class="hint-item"><strong>声が合わない</strong><span>参照音声の文字起こしを、聞こえた通りに 1 文字も省略せず入れてください。</span></div>
-                              <div class="hint-item"><strong>動画を入れたら失敗する</strong><span>動画から音声を取り出すには ffmpeg が必要です。ターミナルなら <code>brew install ffmpeg</code> です。</span></div>
-                              <div class="hint-item"><strong>生成が遅い</strong><span>初回はモデル読み込みに時間がかかります。再起動後も遅い場合は、まず 1 文だけで試してください。</span></div>
-                              <div class="hint-item"><strong>ローカル文字起こしが使えない</strong><span>DMG 版ではセットアップ完了後に同梱環境が入ります。ソース版では <code>./install_local_asr.command</code> を実行してください。</span></div>
-                            </div>
-                            <div class="resource-links">
-                              <a class="resource-link" href="https://github.com/kantaro4123/qwen-tts-jp-starter" target="_blank" rel="noopener noreferrer">GitHub レポジトリを見る<small>更新状況、README、リリース履歴を確認できます。</small></a>
-                              <a class="resource-link" href="https://github.com/QwenLM/Qwen3-TTS" target="_blank" rel="noopener noreferrer">Qwen3-TTS 公式ページを見る<small>モデル本体の仕様や最新情報を確認したいときはこちらです。</small></a>
-                            </div>
-                            """
-                        )
+                        gr.HTML('<div class="panel-title">ヘルプ</div>')
+                        with gr.Row(elem_classes=["help-grid"]):
+                            with gr.Column():
+                                gr.HTML(
+                                    """
+                                    <div class="hint-list">
+                                      <div class="hint-item"><strong>声が合わない</strong><span>参照音声の文字起こしを、聞こえた通りに 1 文字も省略せず入れてください。</span></div>
+                                      <div class="hint-item"><strong>動画を入れたら失敗する</strong><span>動画から音声を取り出すには ffmpeg が必要です。ターミナルなら <code>brew install ffmpeg</code> です。</span></div>
+                                      <div class="hint-item"><strong>生成が遅い</strong><span>初回はモデル読み込みに時間がかかります。再起動後も遅い場合は、まず 1 文だけで試してください。</span></div>
+                                      <div class="hint-item"><strong>ローカル文字起こしが使えない</strong><span>アプリ版ではセットアップ完了後に同梱環境が入ります。ソース版では <code>./install_local_asr.command</code> を実行してください。</span></div>
+                                    </div>
+                                    """
+                                )
+                            with gr.Column():
+                                gr.HTML(
+                                    """
+                                    <div class="mini-card">
+                                      <h3>参考リンク</h3>
+                                      <p>更新履歴やモデル本体の情報を見たいときは、ここから確認できます。</p>
+                                      <div class="resource-links">
+                                        <a class="resource-link" href="https://github.com/kantaro4123/qwen-tts-jp-starter" target="_blank" rel="noopener noreferrer">GitHub レポジトリを見る<small>更新状況、README、リリース履歴を確認できます。</small></a>
+                                        <a class="resource-link" href="https://github.com/QwenLM/Qwen3-TTS" target="_blank" rel="noopener noreferrer">Qwen3-TTS 公式ページを見る<small>モデル本体の仕様や最新情報を確認したいときはこちらです。</small></a>
+                                      </div>
+                                    </div>
+                                    """
+                                )
 
             prepare_button.click(
                 fn=prepare_reference_audio,

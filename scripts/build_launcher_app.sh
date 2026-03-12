@@ -8,6 +8,7 @@ APP_NAME="かんたんボイスクローン.app"
 APP_DIR="$BUILD_DIR/$APP_NAME"
 APP_EXECUTABLE_NAME="kantan-voice-clone"
 APP_SOURCE="$PROJECT_DIR/macos/DesktopApp.swift"
+SWIFT_MODULE_CACHE_DIR="$PROJECT_DIR/build/.swift-module-cache"
 PAYLOAD_DIR="$BUILD_DIR/standalone-payload"
 PAYLOAD_RUNTIME_DIR="$PAYLOAD_DIR/runtime"
 MODEL_BUNDLE_DIR="$BUILD_DIR/model-bundle"
@@ -18,7 +19,7 @@ BUNDLE_QWEN_MODEL_ID="${BUNDLE_QWEN_MODEL_ID:-}"
 BUNDLE_QWEN_MODEL_SOURCE_DIR="${BUNDLE_QWEN_MODEL_SOURCE_DIR:-}"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$PAYLOAD_RUNTIME_DIR"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$PAYLOAD_RUNTIME_DIR" "$SWIFT_MODULE_CACHE_DIR"
 
 if [ ! -x "$PROJECT_DIR/.venv/bin/python" ]; then
   echo "standalone アプリをビルドするには、先に ./setup.command で .venv を作成してください。" >&2
@@ -54,12 +55,13 @@ if [ -n "$BUNDLE_QWEN_MODEL_ID" ] || [ -n "$BUNDLE_QWEN_MODEL_SOURCE_DIR" ]; the
     bundle_args+=(--source-dir "$BUNDLE_QWEN_MODEL_SOURCE_DIR")
   fi
   "${bundle_args[@]}"
-  COPYFILE_DISABLE=1 tar -czf "$APP_DIR/Contents/Resources/bundled-models.tar.gz" -C "$MODEL_BUNDLE_DIR" .
+  COPYFILE_DISABLE=1 /usr/bin/tar -czf "$APP_DIR/Contents/Resources/bundled-models.tar.gz" -C "$MODEL_BUNDLE_DIR" .
   cp "$MODEL_BUNDLE_DIR/model-map.json" "$APP_DIR/Contents/Resources/bundled-model-map.json"
 fi
 
 swiftc \
   -O \
+  -module-cache-path "$SWIFT_MODULE_CACHE_DIR" \
   -framework AppKit \
   -framework WebKit \
   "$APP_SOURCE" \
@@ -96,7 +98,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-COPYFILE_DISABLE=1 tar -czf "$APP_DIR/Contents/Resources/runtime.tar.gz" -C "$PAYLOAD_DIR" runtime
+COPYFILE_DISABLE=1 /usr/bin/tar -czf "$APP_DIR/Contents/Resources/runtime.tar.gz" -C "$PAYLOAD_DIR" runtime
 cp "$PROJECT_DIR/README.md" "$APP_DIR/Contents/Resources/README.md"
 printf '%s\n' "$APP_VERSION" > "$APP_DIR/Contents/Resources/runtime-version.txt"
 
