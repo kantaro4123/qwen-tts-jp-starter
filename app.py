@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -17,16 +16,12 @@ from pydub.silence import detect_nonsilent
 from qwen_tts import Qwen3TTSModel
 
 
-DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
 DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
 DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
-DEFAULT_GENERATION_KWARGS = {
-    "do_sample": False,
-    "subtalker_dosample": False,
-    "repetition_penalty": 1.05,
-}
+DEFAULT_GENERATION_KWARGS = {}
 
 
 @dataclass
@@ -39,8 +34,6 @@ class AppConfig:
 
 APP_CONFIG = AppConfig()
 _MODEL: Optional[Qwen3TTSModel] = None
-_MODEL_ID_LOADED: Optional[str] = None
-_VOICE_PROMPT_CACHE: dict[tuple[str, str, int], object] = {}
 
 
 def detect_device() -> str:
@@ -50,8 +43,8 @@ def detect_device() -> str:
 
 
 def load_model() -> Qwen3TTSModel:
-    global _MODEL, _MODEL_ID_LOADED
-    if _MODEL is not None and _MODEL_ID_LOADED == APP_CONFIG.model_id:
+    global _MODEL
+    if _MODEL is not None:
         return _MODEL
 
     device = detect_device()
@@ -62,7 +55,6 @@ def load_model() -> Qwen3TTSModel:
         attn_implementation="eager",
     )
     _MODEL = model
-    _MODEL_ID_LOADED = APP_CONFIG.model_id
     return model
 
 
@@ -194,32 +186,6 @@ def prepare_reference_audio(
     return status, output_path, output_path
 
 
-def estimate_max_new_tokens(target_text: str) -> int:
-    text_length = len(target_text.strip())
-    return max(180, min(900, text_length * 18))
-
-
-def get_voice_prompt_cache_key(reference_audio: str, reference_text: str) -> tuple[str, str, int]:
-    ref_path = Path(reference_audio)
-    stat = ref_path.stat()
-    return (str(ref_path.resolve()), reference_text.strip(), stat.st_mtime_ns)
-
-
-def get_or_create_voice_prompt(model: Qwen3TTSModel, reference_audio: str, reference_text: str):
-    cache_key = get_voice_prompt_cache_key(reference_audio, reference_text)
-    cached = _VOICE_PROMPT_CACHE.get(cache_key)
-    if cached is not None:
-        return cached, True
-
-    prompt = model.create_voice_clone_prompt(
-        ref_audio=reference_audio,
-        ref_text=reference_text.strip(),
-        x_vector_only_mode=False,
-    )
-    _VOICE_PROMPT_CACHE[cache_key] = prompt
-    return prompt, False
-
-
 def generate_voice_clone(
     reference_audio: Optional[str],
     reference_video: Optional[str],
@@ -248,31 +214,18 @@ def generate_voice_clone(
     if error:
         return error, prepared_reference_audio, None
 
-    if len(target_text.strip()) > 80:
-        return "まずは短文で試してください。現在の高速設定では、80文字以下くらいが安定です。", resolved_reference_audio, None
-
     model = load_model()
-    start_time = time.time()
-    prompt_items, cache_hit = get_or_create_voice_prompt(model, resolved_reference_audio, reference_text)
-    prompt_elapsed = time.time() - start_time
-    generation_start = time.time()
-    max_new_tokens = estimate_max_new_tokens(target_text)
     wavs, sample_rate = model.generate_voice_clone(
         text=target_text.strip(),
         language=DEFAULT_LANGUAGE,
-        voice_clone_prompt=prompt_items,
+        ref_audio=resolved_reference_audio,
+        ref_text=reference_text.strip(),
         non_streaming_mode=True,
-        max_new_tokens=max_new_tokens,
         **DEFAULT_GENERATION_KWARGS,
     )
-    generation_elapsed = time.time() - generation_start
     output_path = save_output_audio(wavs[0], sample_rate)
     message = (
-        "生成できました。"
-        f" 参照音声の準備: {prompt_elapsed:.1f}秒"
-        f" / 音声生成: {generation_elapsed:.1f}秒"
-        f" / 話者キャッシュ: {'再利用' if cache_hit else '新規作成'}"
-        f" / max_new_tokens: {max_new_tokens}"
+        "生成できました。下のプレイヤーで確認して、必要なら wav ファイルとして保存してください。"
     )
     return message, resolved_reference_audio, output_path
 
@@ -326,13 +279,13 @@ def build_app() -> gr.Blocks:
                 """
                 <section class="hero">
                   <h1>かんたんボイスクローン</h1>
-                  <p>Qwen-TTS を日本語でわかりやすく使うための、初心者向けローカルアプリです。既定では速度優先の 0.6B モデルを使います。</p>
+                  <p>Qwen-TTS を日本語でわかりやすく使うための、初心者向けローカルアプリです。</p>
                   <ol>
                     <li>音声または動画を入れて、必要なら切り出す</li>
                     <li>その音声の文字起こしを正確に入力する</li>
                     <li>読ませたい文章を入れて生成する</li>
                   </ol>
-                  <p class="tip">このアプリは話者をなるべく寄せますが、完全に同一の声になるとは限りません。まずは短文で確認してください。本人の声、または明確な許可がある声だけを使ってください。</p>
+                  <p class="tip">このアプリは話者をなるべく寄せますが、完全に同一の声になるとは限りません。本人の声、または明確な許可がある声だけを使ってください。</p>
                 </section>
                 """
             )
@@ -414,9 +367,9 @@ def build_app() -> gr.Blocks:
                 - 先に「参照素材を整える」を押すと、切り出し結果を確認できます。
                 - 声が不安定なときは、雑音の少ない3秒以上の音声を使ってください。精度を上げたいなら30秒前後も有効です。
                 - 参照音声と参照テキストが少しでもズレると、別人っぽい声になりやすいです。
-                - このアプリは速度優先の 0.6B モデルを既定で使い、話者プロンプトも再利用して遅さを抑えています。
+                - 生成が極端に遅いときは、一度アプリを再起動してから短文で試してください。
                 - 参照テキストは、省略せずに実際の音声どおり入力してください。
-                - 最初は短い文で試すと成功しやすいです。長文は時間がかかります。
+                - 最初は短い文で試すと成功しやすいです。
                 """
             )
 
