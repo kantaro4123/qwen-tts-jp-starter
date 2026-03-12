@@ -18,6 +18,19 @@ from qwen_tts import Qwen3TTSModel
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
+SUPPORTED_LANGUAGES = [
+    "Auto",
+    "Chinese",
+    "English",
+    "German",
+    "Italian",
+    "Portuguese",
+    "Spanish",
+    "Japanese",
+    "Korean",
+    "French",
+    "Russian",
+]
 DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
 DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
@@ -245,6 +258,7 @@ def generate_voice_clone(
     prepared_reference_audio: Optional[str],
     reference_text: str,
     target_text: str,
+    target_language: str,
     trim_start_sec: float,
     trim_end_sec: float,
     auto_trim_silence: bool,
@@ -270,7 +284,7 @@ def generate_voice_clone(
     model = load_model()
     wavs, sample_rate = model.generate_voice_clone(
         text=target_text.strip(),
-        language=DEFAULT_LANGUAGE,
+        language=target_language or DEFAULT_LANGUAGE,
         ref_audio=resolved_reference_audio,
         ref_text=reference_text.strip(),
         non_streaming_mode=True,
@@ -395,6 +409,12 @@ def build_app() -> gr.Blocks:
                 lines=4,
             )
             fill_target_text_button = gr.Button("読ませたい文章の例文を入れる")
+            target_language = gr.Dropdown(
+                label="4. 読ませる言語",
+                choices=SUPPORTED_LANGUAGES,
+                value=DEFAULT_LANGUAGE,
+                interactive=True,
+            )
 
             status = gr.Markdown(
                 "先に「参照素材を整える」で切り出し結果を確認できます。初回の音声生成はモデルの読み込みに少し時間がかかります。"
@@ -402,7 +422,7 @@ def build_app() -> gr.Blocks:
 
             output_audio = gr.Audio(
                 type="filepath",
-                label="4. 生成結果",
+                label="5. 生成結果",
                 interactive=False,
             )
 
@@ -424,6 +444,7 @@ def build_app() -> gr.Blocks:
                     prepared_reference_state,
                     reference_text,
                     target_text,
+                    target_language,
                     trim_start_sec,
                     trim_end_sec,
                     auto_trim_silence,
