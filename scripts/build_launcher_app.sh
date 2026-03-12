@@ -10,7 +10,11 @@ APP_EXECUTABLE_NAME="kantan-voice-clone"
 APP_SOURCE="$PROJECT_DIR/macos/DesktopApp.swift"
 PAYLOAD_DIR="$BUILD_DIR/standalone-payload"
 PAYLOAD_RUNTIME_DIR="$PAYLOAD_DIR/runtime"
-APP_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "0.2.0")
+MODEL_BUNDLE_DIR="$BUILD_DIR/model-bundle"
+APP_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "0.3.0")
+CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
+BUNDLE_QWEN_MODEL_ID="${BUNDLE_QWEN_MODEL_ID:-}"
+BUNDLE_QWEN_MODEL_SOURCE_DIR="${BUNDLE_QWEN_MODEL_SOURCE_DIR:-}"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$PAYLOAD_RUNTIME_DIR"
@@ -35,6 +39,27 @@ for path in list(root.rglob("__pycache__")):
 for path in list(root.rglob("*.pyc")):
     path.unlink(missing_ok=True)
 PY
+
+if [ -n "$BUNDLE_QWEN_MODEL_ID" ] || [ -n "$BUNDLE_QWEN_MODEL_SOURCE_DIR" ]; then
+  mkdir -p "$MODEL_BUNDLE_DIR"
+  PYTHON_FOR_BUNDLE="$PROJECT_DIR/.venv/bin/python"
+  if [ ! -x "$PYTHON_FOR_BUNDLE" ]; then
+    PYTHON_FOR_BUNDLE="python3"
+  fi
+  model_id="${BUNDLE_QWEN_MODEL_ID:-Qwen/Qwen3-TTS-12Hz-1.7B-Base}"
+  bundle_args=(
+    "$PYTHON_FOR_BUNDLE"
+    "$PROJECT_DIR/scripts/prepare_bundled_model.py"
+    --model-id "$model_id"
+    --output-dir "$MODEL_BUNDLE_DIR"
+  )
+  if [ -n "$BUNDLE_QWEN_MODEL_SOURCE_DIR" ]; then
+    bundle_args+=(--source-dir "$BUNDLE_QWEN_MODEL_SOURCE_DIR")
+  fi
+  "${bundle_args[@]}"
+  COPYFILE_DISABLE=1 tar -czf "$APP_DIR/Contents/Resources/bundled-models.tar.gz" -C "$MODEL_BUNDLE_DIR" .
+  cp "$MODEL_BUNDLE_DIR/model-map.json" "$APP_DIR/Contents/Resources/bundled-model-map.json"
+fi
 
 swiftc \
   -O \
@@ -79,7 +104,7 @@ cp "$PROJECT_DIR/README.md" "$APP_DIR/Contents/Resources/README.md"
 printf '%s\n' "$APP_VERSION" > "$APP_DIR/Contents/Resources/runtime-version.txt"
 
 chmod +x "$APP_DIR/Contents/MacOS/$APP_EXECUTABLE_NAME"
-codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null 2>&1 || true
 
 echo "Built standalone desktop app:"
 echo "$APP_DIR"

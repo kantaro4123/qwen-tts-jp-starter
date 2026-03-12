@@ -9,6 +9,7 @@ DIST_DIR="$PROJECT_DIR/dist"
 APP_NAME="かんたんボイスクローン.app"
 DMG_NAME="qwen-tts-jp-starter-macos.dmg"
 WELCOME_FILE="$PROJECT_DIR/macos/はじめに.txt"
+CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 
 "$SCRIPT_DIR/build_launcher_app.sh"
 
@@ -28,6 +29,8 @@ hdiutil create \
   -ov \
   -format UDZO \
   "$DIST_DIR/$DMG_NAME"
+
+codesign --force --sign "$CODESIGN_IDENTITY" "$DIST_DIR/$DMG_NAME" >/dev/null 2>&1 || true
 
 echo "Built dmg:"
 echo "$DIST_DIR/$DMG_NAME"

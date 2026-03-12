@@ -75,6 +75,28 @@ APP_CONFIG = AppConfig()
 _MODEL: Optional[Qwen3TTSModel] = None
 
 
+def load_model_path_overrides() -> dict[str, str]:
+    mapping_path = os.environ.get("QWEN_TTS_MODEL_MAP_PATH", "").strip()
+    if not mapping_path:
+        return {}
+    path = Path(mapping_path)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    result: dict[str, str] = {}
+    for model_id, local_path in data.items():
+        if not isinstance(model_id, str) or not isinstance(local_path, str):
+            continue
+        if Path(local_path).exists():
+            result[model_id] = local_path
+    return result
+
+
 def ensure_settings_dir() -> None:
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -121,8 +143,9 @@ def load_model() -> Qwen3TTSModel:
         return _MODEL
 
     device = detect_device()
+    source = load_model_path_overrides().get(APP_CONFIG.model_id, APP_CONFIG.model_id)
     model = Qwen3TTSModel.from_pretrained(
-        APP_CONFIG.model_id,
+        source,
         device_map=device,
         dtype=torch.float32,
         attn_implementation="eager",

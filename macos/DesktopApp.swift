@@ -3,9 +3,23 @@ import Foundation
 import WebKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
-    private let bundleFallbackProjectDir = Bundle.main.bundleURL.deletingLastPathComponent()
+    private struct QwenOption {
+        let label: String
+        let modelID: String
+    }
+
+    private let qwenOptions: [QwenOption] = [
+        .init(label: "高精度 1.7B", modelID: "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+        .init(label: "軽量 0.6B", modelID: "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+    ]
+    private let asrOptions = ["small", "base", "medium"]
     private let backendPort = "7860"
     private let releasesURL = URL(string: "https://github.com/kantaro4123/qwen-tts-jp-starter/releases/latest")!
+    private let selectionDefaults = UserDefaults.standard
+    private let qwenDefaultsKey = "selectedQwenModelID"
+    private let asrDefaultsKey = "selectedLocalASRModel"
+
+    private let bundleFallbackProjectDir = Bundle.main.bundleURL.deletingLastPathComponent()
 
     private lazy var appSupportBaseURL: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -14,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     private lazy var runtimeRootURL: URL = {
         appSupportBaseURL.appendingPathComponent("runtime", isDirectory: true)
+    }()
+
+    private lazy var bundledModelsRootURL: URL = {
+        appSupportBaseURL.appendingPathComponent("bundled-models", isDirectory: true)
     }()
 
     private lazy var bundledRuntimeArchiveURL: URL? = {
@@ -33,6 +51,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }()
 
+    private lazy var bundledModelsArchiveURL: URL? = {
+        Bundle.main.url(forResource: "bundled-models", withExtension: "tar.gz")
+    }()
+
+    private lazy var bundledModelsMetadataURL: URL? = {
+        Bundle.main.url(forResource: "bundled-model-map", withExtension: "json")
+    }()
+
     private var window: NSWindow!
     private var statusLabel: NSTextField!
     private var spinner: NSProgressIndicator!
@@ -43,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var updateButton: NSButton!
     private var installASRButton: NSButton!
     private var helpButton: NSButton!
+    private var qwenPopup: NSPopUpButton!
+    private var asrPopup: NSPopUpButton!
 
     private var activeTask: Process?
     private var backendProcess: Process?
@@ -54,14 +82,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private var currentProjectDir: URL {
-        if usesBundledRuntime {
-            return runtimeRootURL
-        }
-        return bundleFallbackProjectDir
+        usesBundledRuntime ? runtimeRootURL : bundleFallbackProjectDir
+    }
+
+    private var runtimeVersionFileURL: URL {
+        runtimeRootURL.appendingPathComponent(".runtime-version")
+    }
+
+    private var bundledModelsVersionFileURL: URL {
+        bundledModelsRootURL.appendingPathComponent(".bundle-version")
+    }
+
+    private var extractedModelMapURL: URL {
+        bundledModelsRootURL.appendingPathComponent("model-map.json")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildWindow()
+        loadSelectionDefaults()
         webView.loadHTMLString(
             """
             <html><body style="font-family:-apple-system; background:#f7f7f4; color:#264033; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
@@ -85,14 +123,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private func initialStatusMessage() -> String {
-        if usesBundledRuntime {
-            return "内蔵ランタイム版です。最初は『初回セットアップ』でランタイムを準備してください。"
-        }
-        return "準備完了です。最初は『初回セットアップ』から始めてください。"
+        usesBundledRuntime
+        ? "内蔵ランタイム版です。モデルを選んで『初回セットアップ』を押してください。"
+        : "準備完了です。モデルを選んで『初回セットアップ』から始めてください。"
     }
 
     private func buildWindow() {
-        let rect = NSRect(x: 0, y: 0, width: 1240, height: 880)
+        let rect = NSRect(x: 0, y: 0, width: 1240, height: 920)
         window = NSWindow(
             contentRect: rect,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -101,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         )
         window.title = "かんたんボイスクローン"
         window.center()
-        window.minSize = NSSize(width: 1040, height: 760)
+        window.minSize = NSSize(width: 1040, height: 800)
 
         let root = NSView()
         root.translatesAutoresizingMaskIntoConstraints = false
@@ -117,6 +154,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         spinner.controlSize = .regular
         spinner.isDisplayedWhenStopped = false
         spinner.translatesAutoresizingMaskIntoConstraints = false
+
+        qwenPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        qwenPopup.translatesAutoresizingMaskIntoConstraints = false
+        qwenPopup.addItems(withTitles: qwenOptions.map(\ .label))
+        qwenPopup.target = self
+        qwenPopup.action = #selector(handleSelectionChange)
+
+        asrPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        asrPopup.translatesAutoresizingMaskIntoConstraints = false
+        asrPopup.addItems(withTitles: asrOptions)
+        asrPopup.target = self
+        asrPopup.action = #selector(handleSelectionChange)
+
+        let qwenLabel = label("Qwen-TTS モデル", fontSize: 13, weight: .semibold)
+        let asrLabel = label("ローカルASR モデル", fontSize: 13, weight: .semibold)
+        let qwenStack = NSStackView(views: [qwenLabel, qwenPopup])
+        qwenStack.orientation = .vertical
+        qwenStack.spacing = 6
+        qwenStack.translatesAutoresizingMaskIntoConstraints = false
+        let asrStack = NSStackView(views: [asrLabel, asrPopup])
+        asrStack.orientation = .vertical
+        asrStack.spacing = 6
+        asrStack.translatesAutoresizingMaskIntoConstraints = false
+        let selectionRow = NSStackView(views: [qwenStack, asrStack])
+        selectionRow.orientation = .horizontal
+        selectionRow.spacing = 14
+        selectionRow.distribution = .fillEqually
+        selectionRow.translatesAutoresizingMaskIntoConstraints = false
 
         startButton = actionButton("起動", action: #selector(handleStart))
         setupButton = actionButton("初回セットアップ", action: #selector(handleSetup))
@@ -137,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         buttonRow2.translatesAutoresizingMaskIntoConstraints = false
 
         let topCard = containerCard()
-        [heroTitle, heroBody, statusLabel, spinner, buttonRow1, buttonRow2].forEach {
+        [heroTitle, heroBody, selectionRow, statusLabel, spinner, buttonRow1, buttonRow2].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             topCard.addSubview($0)
         }
@@ -183,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             topCard.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             topCard.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             topCard.topAnchor.constraint(equalTo: root.topAnchor),
-            topCard.heightAnchor.constraint(equalToConstant: 210),
+            topCard.heightAnchor.constraint(equalToConstant: 270),
 
             heroTitle.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
             heroTitle.topAnchor.constraint(equalTo: topCard.topAnchor, constant: 22),
@@ -192,8 +257,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             heroBody.topAnchor.constraint(equalTo: heroTitle.bottomAnchor, constant: 10),
             heroBody.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
 
+            selectionRow.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
+            selectionRow.trailingAnchor.constraint(equalTo: topCard.trailingAnchor, constant: -24),
+            selectionRow.topAnchor.constraint(equalTo: heroBody.bottomAnchor, constant: 14),
+            selectionRow.heightAnchor.constraint(equalToConstant: 56),
+
             statusLabel.leadingAnchor.constraint(equalTo: topCard.leadingAnchor, constant: 24),
-            statusLabel.topAnchor.constraint(equalTo: heroBody.bottomAnchor, constant: 12),
+            statusLabel.topAnchor.constraint(equalTo: selectionRow.bottomAnchor, constant: 12),
             statusLabel.trailingAnchor.constraint(equalTo: spinner.leadingAnchor, constant: -12),
 
             spinner.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
@@ -212,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             webCard.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             webCard.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             webCard.topAnchor.constraint(equalTo: topCard.bottomAnchor, constant: 18),
-            webCard.heightAnchor.constraint(equalToConstant: 400),
+            webCard.heightAnchor.constraint(equalToConstant: 370),
 
             webView.leadingAnchor.constraint(equalTo: webCard.leadingAnchor, constant: 14),
             webView.trailingAnchor.constraint(equalTo: webCard.trailingAnchor, constant: -14),
@@ -271,8 +341,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         return button
     }
 
+    private func selectedQwenModelID() -> String {
+        let index = max(0, qwenPopup.indexOfSelectedItem)
+        return qwenOptions[index].modelID
+    }
+
+    private func selectedASRModel() -> String {
+        let index = max(0, asrPopup.indexOfSelectedItem)
+        return asrOptions[index]
+    }
+
+    private func loadSelectionDefaults() {
+        let savedQwen = selectionDefaults.string(forKey: qwenDefaultsKey) ?? qwenOptions[0].modelID
+        let savedASR = selectionDefaults.string(forKey: asrDefaultsKey) ?? asrOptions[0]
+        if let qIndex = qwenOptions.firstIndex(where: { $0.modelID == savedQwen }) {
+            qwenPopup.selectItem(at: qIndex)
+        }
+        if let aIndex = asrOptions.firstIndex(of: savedASR) {
+            asrPopup.selectItem(at: aIndex)
+        }
+    }
+
+    private func persistSelectionDefaults() {
+        selectionDefaults.set(selectedQwenModelID(), forKey: qwenDefaultsKey)
+        selectionDefaults.set(selectedASRModel(), forKey: asrDefaultsKey)
+    }
+
+    private func settingsPayload() -> Data? {
+        let payload: [String: String] = [
+            "qwen_tts_model_id": selectedQwenModelID(),
+            "local_asr_model": selectedASRModel(),
+        ]
+        return try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+    }
+
     private func setBusy(_ busy: Bool) {
         [startButton, setupButton, updateButton, installASRButton, helpButton].forEach { $0.isEnabled = !busy }
+        qwenPopup.isEnabled = !busy
+        asrPopup.isEnabled = !busy
         if busy {
             spinner.startAnimation(nil)
         } else {
@@ -307,20 +413,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         currentProjectDir.appendingPathComponent(name)
     }
 
-    private func runtimePythonURL() -> URL {
-        projectFile(".venv/bin/python")
-    }
-
-    private func runtimeVersionFileURL() -> URL {
-        currentProjectDir.appendingPathComponent(".runtime-version")
-    }
-
     private func projectHasGit() -> Bool {
         FileManager.default.fileExists(atPath: projectFile(".git").path)
     }
 
     private func runtimeLooksInstalled() -> Bool {
-        FileManager.default.fileExists(atPath: runtimePythonURL().path)
+        FileManager.default.fileExists(atPath: projectFile(".venv/bin/python").path)
     }
 
     private func isSetupComplete() -> Bool {
@@ -338,9 +436,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         return bundleFallbackProjectDir.appendingPathComponent("README.md")
     }
 
+    private func writeRuntimeSettings() throws {
+        persistSelectionDefaults()
+        let configDir = currentProjectDir.appendingPathComponent("config", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+        let settingsURL = configDir.appendingPathComponent("settings.json")
+        if let data = settingsPayload() {
+            try data.write(to: settingsURL)
+            appendLog("設定を書き込みました: \(selectedQwenModelID()) / ASR \(selectedASRModel())")
+        }
+    }
+
+    private func ensureBundledModelBundleInstalled(force: Bool = false, completion: @escaping (Bool) -> Void) {
+        guard let archiveURL = bundledModelsArchiveURL, let metadataURL = bundledModelsMetadataURL else {
+            completion(true)
+            return
+        }
+
+        let installedVersion = (try? String(contentsOf: bundledModelsVersionFileURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? ""
+        if !force && FileManager.default.fileExists(atPath: extractedModelMapURL.path) && installedVersion == bundledRuntimeVersion {
+            completion(true)
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let fm = FileManager.default
+                try fm.createDirectory(at: self.bundledModelsRootURL, withIntermediateDirectories: true)
+                if fm.fileExists(atPath: self.bundledModelsRootURL.path) {
+                    let contents = try fm.contentsOfDirectory(at: self.bundledModelsRootURL, includingPropertiesForKeys: nil)
+                    for item in contents {
+                        try fm.removeItem(at: item)
+                    }
+                }
+
+                let process = Process()
+                process.currentDirectoryURL = self.bundledModelsRootURL
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+                process.arguments = ["-xzf", archiveURL.path, "-C", self.bundledModelsRootURL.path]
+                try process.run()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0 else {
+                    DispatchQueue.main.async { completion(false) }
+                    return
+                }
+
+                let raw = try Data(contentsOf: metadataURL)
+                let relMap = try JSONSerialization.jsonObject(with: raw) as? [String: String] ?? [:]
+                var absMap: [String: String] = [:]
+                for (modelID, relPath) in relMap {
+                    absMap[modelID] = self.bundledModelsRootURL.appendingPathComponent(relPath).path
+                }
+                let data = try JSONSerialization.data(withJSONObject: absMap, options: [.prettyPrinted])
+                try data.write(to: self.extractedModelMapURL)
+                try self.bundledRuntimeVersion.write(to: self.bundledModelsVersionFileURL, atomically: true, encoding: .utf8)
+                DispatchQueue.main.async {
+                    self.appendLog("同梱モデルを展開しました。")
+                    completion(true)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.appendLog("同梱モデルの展開に失敗しました: \(error.localizedDescription)")
+                    completion(false)
+                }
+            }
+        }
+    }
+
     private func ensureBundledRuntimeInstalled(force: Bool = false, completion: @escaping (Bool) -> Void) {
         guard usesBundledRuntime else {
-            completion(true)
+            do {
+                try writeRuntimeSettings()
+                completion(true)
+            } catch {
+                updateStatus("設定の書き込みに失敗しました: \(error.localizedDescription)")
+                completion(false)
+            }
             return
         }
         guard let archiveURL = bundledRuntimeArchiveURL else {
@@ -348,9 +520,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             return
         }
 
-        let installedVersion = (try? String(contentsOf: runtimeVersionFileURL(), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? ""
+        let installedVersion = (try? String(contentsOf: runtimeVersionFileURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? ""
         if !force && runtimeLooksInstalled() && installedVersion == bundledRuntimeVersion {
-            completion(true)
+            do {
+                try writeRuntimeSettings()
+            } catch {
+                updateStatus("設定の書き込みに失敗しました: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            ensureBundledModelBundleInstalled(force: force, completion: completion)
             return
         }
 
@@ -371,21 +550,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 process.currentDirectoryURL = self.appSupportBaseURL
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
                 process.arguments = ["-xzf", archiveURL.path, "-C", self.appSupportBaseURL.path]
-                let stdout = Pipe()
-                let stderr = Pipe()
-                process.standardOutput = stdout
-                process.standardError = stderr
                 try process.run()
                 process.waitUntilExit()
-
-                let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                if !stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.appendLog(stdoutText.trimmingCharacters(in: .whitespacesAndNewlines))
-                }
-                if !stderrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.appendLog(stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
-                }
                 guard process.terminationStatus == 0 else {
                     DispatchQueue.main.async {
                         self.setBusy(false)
@@ -395,12 +561,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                     return
                 }
 
-                try self.bundledRuntimeVersion.write(to: self.runtimeVersionFileURL(), atomically: true, encoding: .utf8)
-                DispatchQueue.main.async {
+                try self.bundledRuntimeVersion.write(to: self.runtimeVersionFileURL, atomically: true, encoding: .utf8)
+                try self.writeRuntimeSettings()
+                self.ensureBundledModelBundleInstalled(force: force) { success in
                     self.setBusy(false)
-                    self.updateStatus("内蔵ランタイムの準備が終わりました。次は『起動』を押してください。")
-                    self.appendLog("内蔵ランタイムの展開が完了しました。")
-                    completion(true)
+                    if success {
+                        self.updateStatus("内蔵ランタイムの準備が終わりました。次は『起動』を押してください。")
+                        self.appendLog("内蔵ランタイムの展開が完了しました。")
+                    } else {
+                        self.updateStatus("内蔵ランタイムは展開できましたが、同梱モデルの展開に失敗しました。")
+                    }
+                    completion(success)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -412,9 +583,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
     }
 
-    private func runShellScript(_ relativePath: String, completion: ((Int32) -> Void)? = nil) {
+    private func runShellScript(_ relativePath: String, extraEnvironment: [String: String] = [:], completion: ((Int32) -> Void)? = nil) {
         guard activeTask == nil else {
             updateStatus("別の処理が進行中です。終わるまで待ってください。")
+            return
+        }
+
+        do {
+            try writeRuntimeSettings()
+        } catch {
+            updateStatus("設定の書き込みに失敗しました: \(error.localizedDescription)")
             return
         }
 
@@ -428,7 +606,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         process.currentDirectoryURL = currentProjectDir
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = [scriptURL.path]
-        process.environment = ProcessInfo.processInfo.environment
+        var env = ProcessInfo.processInfo.environment
+        extraEnvironment.forEach { env[$0.key] = $0.value }
+        if FileManager.default.fileExists(atPath: extractedModelMapURL.path) {
+            env["QWEN_TTS_MODEL_MAP_PATH"] = extractedModelMapURL.path
+        }
+        process.environment = env
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -541,6 +724,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             var environment = ProcessInfo.processInfo.environment
             environment["QWEN_TTS_NO_OPEN_BROWSER"] = "1"
             environment["QWEN_TTS_PORT"] = self.backendPort
+            if FileManager.default.fileExists(atPath: self.extractedModelMapURL.path) {
+                environment["QWEN_TTS_MODEL_MAP_PATH"] = self.extractedModelMapURL.path
+            }
             process.environment = environment
 
             let stdout = Pipe()
@@ -639,13 +825,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         NSWorkspace.shared.open(url)
     }
 
+    @objc private func handleSelectionChange() {
+        persistSelectionDefaults()
+        updateStatus("選択中: \(selectedQwenModelID()) / ASR \(selectedASRModel())")
+    }
+
     @objc private func handleStart() {
         startBackendIfNeeded()
     }
 
     @objc private func handleSetup() {
         if usesBundledRuntime {
-            ensureBundledRuntimeInstalled { _ in }
+            ensureBundledRuntimeInstalled(force: true) { _ in }
             return
         }
 
