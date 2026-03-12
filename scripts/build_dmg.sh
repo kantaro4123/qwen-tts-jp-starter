@@ -13,19 +13,11 @@ WELCOME_FILE="$PROJECT_DIR/macos/はじめに.txt"
 "$SCRIPT_DIR/build_launcher_app.sh"
 
 rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR/qwen-tts-jp-starter"
+mkdir -p "$STAGE_DIR"
 
-rsync -a \
-  --exclude ".git" \
-  --exclude ".venv" \
-  --exclude "__pycache__" \
-  --exclude "build" \
-  --exclude "dist" \
-  --exclude "outputs" \
-  "$PROJECT_DIR/" "$STAGE_DIR/qwen-tts-jp-starter/"
-
-cp -R "$BUILD_DIR/macos-launcher/$APP_NAME" "$STAGE_DIR/qwen-tts-jp-starter/$APP_NAME"
+cp -R "$BUILD_DIR/macos-launcher/$APP_NAME" "$STAGE_DIR/$APP_NAME"
 cp "$WELCOME_FILE" "$STAGE_DIR/はじめに.txt"
+ln -s /Applications "$STAGE_DIR/Applications"
 
 mkdir -p "$DIST_DIR"
 rm -f "$DIST_DIR/$DMG_NAME"

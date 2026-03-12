@@ -3,6 +3,36 @@ import Foundation
 import WebKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+    private let bundleFallbackProjectDir = Bundle.main.bundleURL.deletingLastPathComponent()
+    private let backendPort = "7860"
+    private let releasesURL = URL(string: "https://github.com/kantaro4123/qwen-tts-jp-starter/releases/latest")!
+
+    private lazy var appSupportBaseURL: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("KantanVoiceClone", isDirectory: true)
+    }()
+
+    private lazy var runtimeRootURL: URL = {
+        appSupportBaseURL.appendingPathComponent("runtime", isDirectory: true)
+    }()
+
+    private lazy var bundledRuntimeArchiveURL: URL? = {
+        Bundle.main.url(forResource: "runtime", withExtension: "tar.gz")
+    }()
+
+    private lazy var bundledReadmeURL: URL? = {
+        Bundle.main.url(forResource: "README", withExtension: "md")
+    }()
+
+    private lazy var bundledRuntimeVersion: String = {
+        if let url = Bundle.main.url(forResource: "runtime-version", withExtension: "txt"),
+           let text = try? String(contentsOf: url, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }()
+
     private var window: NSWindow!
     private var statusLabel: NSTextField!
     private var spinner: NSProgressIndicator!
@@ -18,14 +48,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var backendProcess: Process?
     private var backendStdout: Pipe?
     private var backendStderr: Pipe?
-    private let projectDir: URL
-    private let releasesURL = URL(string: "https://github.com/kantaro4123/qwen-tts-jp-starter/releases/latest")!
-    private let pythonDownloadURL = URL(string: "https://www.python.org/downloads/macos/")!
-    private let backendPort = "7860"
 
-    override init() {
-        projectDir = Bundle.main.bundleURL.deletingLastPathComponent()
-        super.init()
+    private var usesBundledRuntime: Bool {
+        bundledRuntimeArchiveURL != nil
+    }
+
+    private var currentProjectDir: URL {
+        if usesBundledRuntime {
+            return runtimeRootURL
+        }
+        return bundleFallbackProjectDir
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,22 +65,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         webView.loadHTMLString(
             """
             <html><body style="font-family:-apple-system; background:#f7f7f4; color:#264033; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
-            <div style="text-align:center; max-width:520px;">
+            <div style="text-align:center; max-width:560px;">
               <h1 style="font-size:32px; margin-bottom:12px;">かんたんボイスクローン</h1>
-              <p style="font-size:16px; line-height:1.7;">右上のボタンからセットアップや起動を進めてください。<br>起動が終わると、この画面の中にアプリ本体が表示されます。</p>
+              <p style="font-size:16px; line-height:1.7;">このアプリの中だけでセットアップと起動を進められます。<br>起動が終わると、この画面の中にアプリ本体が表示されます。</p>
             </div>
             </body></html>
             """,
             baseURL: nil
         )
-        updateStatus("準備完了です。最初は『初回セットアップ』から始めてください。")
+        updateStatus(initialStatusMessage())
         appendLog("アプリを起動しました。")
+        appendLog(usesBundledRuntime ? "内蔵ランタイム版として起動しています。" : "開発モードとして起動しています。")
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         terminateProcess(&activeTask)
         terminateProcess(&backendProcess)
+    }
+
+    private func initialStatusMessage() -> String {
+        if usesBundledRuntime {
+            return "内蔵ランタイム版です。最初は『初回セットアップ』でランタイムを準備してください。"
+        }
+        return "準備完了です。最初は『初回セットアップ』から始めてください。"
     }
 
     private func buildWindow() {
@@ -68,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.contentView = root
 
         let heroTitle = label("かんたんボイスクローン", fontSize: 28, weight: .bold)
-        let heroBody = wrappingLabel("Qwen-TTS を、日本語でわかりやすく始めるための macOS アプリです。セットアップ、起動、更新、ローカル文字起こし追加まで、このアプリ内で進められます。", fontSize: 14, weight: .regular)
+        let heroBody = wrappingLabel("Qwen-TTS を、日本語でわかりやすく始めるための macOS アプリです。起動、セットアップ、ローカル文字起こし追加まで、このアプリの中だけで進められます。", fontSize: 14, weight: .regular)
         statusLabel = wrappingLabel("準備中...", fontSize: 13, weight: .medium)
         statusLabel.textColor = NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.29, alpha: 1)
 
@@ -96,17 +136,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         buttonRow2.distribution = .fillEqually
         buttonRow2.translatesAutoresizingMaskIntoConstraints = false
 
-        let topCard = NSView()
-        topCard.translatesAutoresizingMaskIntoConstraints = false
-        topCard.wantsLayer = true
-        topCard.layer?.backgroundColor = NSColor(calibratedWhite: 0.98, alpha: 0.94).cgColor
-        topCard.layer?.cornerRadius = 22
-        topCard.layer?.borderWidth = 1
-        topCard.layer?.borderColor = NSColor(calibratedWhite: 0.86, alpha: 1).cgColor
-
-        [heroTitle, heroBody, statusLabel, spinner, buttonRow1, buttonRow2].forEach { subview in
-            subview.translatesAutoresizingMaskIntoConstraints = false
-            topCard.addSubview(subview)
+        let topCard = containerCard()
+        [heroTitle, heroBody, statusLabel, spinner, buttonRow1, buttonRow2].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            topCard.addSubview($0)
         }
 
         let config = WKWebViewConfiguration()
@@ -134,9 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         scrollView.documentView = logTextView
 
         let logCard = containerCard()
-        [logLabel, scrollView].forEach { view in
-            view.translatesAutoresizingMaskIntoConstraints = false
-            logCard.addSubview(view)
+        [logLabel, scrollView].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            logCard.addSubview($0)
         }
 
         [topCard, webCard, logCard].forEach(root.addSubview)
@@ -271,22 +304,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private func projectFile(_ name: String) -> URL {
-        projectDir.appendingPathComponent(name)
+        currentProjectDir.appendingPathComponent(name)
+    }
+
+    private func runtimePythonURL() -> URL {
+        projectFile(".venv/bin/python")
+    }
+
+    private func runtimeVersionFileURL() -> URL {
+        currentProjectDir.appendingPathComponent(".runtime-version")
     }
 
     private func projectHasGit() -> Bool {
         FileManager.default.fileExists(atPath: projectFile(".git").path)
     }
 
+    private func runtimeLooksInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: runtimePythonURL().path)
+    }
+
     private func isSetupComplete() -> Bool {
-        FileManager.default.fileExists(atPath: projectFile(".venv").path)
+        runtimeLooksInstalled()
     }
 
     private func readmeURL() -> URL {
-        projectFile("README.md")
+        let runtimeReadme = projectFile("README.md")
+        if FileManager.default.fileExists(atPath: runtimeReadme.path) {
+            return runtimeReadme
+        }
+        if let bundledReadmeURL {
+            return bundledReadmeURL
+        }
+        return bundleFallbackProjectDir.appendingPathComponent("README.md")
     }
 
-    private func runShellScript(_ relativePath: String, extraEnvironment: [String: String] = [:], completion: ((Int32) -> Void)? = nil) {
+    private func ensureBundledRuntimeInstalled(force: Bool = false, completion: @escaping (Bool) -> Void) {
+        guard usesBundledRuntime else {
+            completion(true)
+            return
+        }
+        guard let archiveURL = bundledRuntimeArchiveURL else {
+            completion(false)
+            return
+        }
+
+        let installedVersion = (try? String(contentsOf: runtimeVersionFileURL(), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? ""
+        if !force && runtimeLooksInstalled() && installedVersion == bundledRuntimeVersion {
+            completion(true)
+            return
+        }
+
+        setBusy(true)
+        updateStatus("内蔵ランタイムを準備しています。初回は少し時間がかかります。")
+        appendLog("内蔵ランタイムの展開を開始します。")
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let fm = FileManager.default
+                try fm.createDirectory(at: self.appSupportBaseURL, withIntermediateDirectories: true)
+                if fm.fileExists(atPath: self.runtimeRootURL.path) {
+                    try fm.removeItem(at: self.runtimeRootURL)
+                }
+
+                let process = Process()
+                process.currentDirectoryURL = self.appSupportBaseURL
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+                process.arguments = ["-xzf", archiveURL.path, "-C", self.appSupportBaseURL.path]
+                let stdout = Pipe()
+                let stderr = Pipe()
+                process.standardOutput = stdout
+                process.standardError = stderr
+                try process.run()
+                process.waitUntilExit()
+
+                let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                if !stdoutText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.appendLog(stdoutText.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                if !stderrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.appendLog(stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                guard process.terminationStatus == 0 else {
+                    DispatchQueue.main.async {
+                        self.setBusy(false)
+                        self.updateStatus("内蔵ランタイムの展開に失敗しました。")
+                        completion(false)
+                    }
+                    return
+                }
+
+                try self.bundledRuntimeVersion.write(to: self.runtimeVersionFileURL(), atomically: true, encoding: .utf8)
+                DispatchQueue.main.async {
+                    self.setBusy(false)
+                    self.updateStatus("内蔵ランタイムの準備が終わりました。次は『起動』を押してください。")
+                    self.appendLog("内蔵ランタイムの展開が完了しました。")
+                    completion(true)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.setBusy(false)
+                    self.updateStatus("内蔵ランタイムの展開に失敗しました: \(error.localizedDescription)")
+                    completion(false)
+                }
+            }
+        }
+    }
+
+    private func runShellScript(_ relativePath: String, completion: ((Int32) -> Void)? = nil) {
         guard activeTask == nil else {
             updateStatus("別の処理が進行中です。終わるまで待ってください。")
             return
@@ -299,13 +425,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
 
         let process = Process()
-        process.currentDirectoryURL = projectDir
+        process.currentDirectoryURL = currentProjectDir
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = [scriptURL.path]
-
-        var environment = ProcessInfo.processInfo.environment
-        extraEnvironment.forEach { environment[$0.key] = $0.value }
-        process.environment = environment
+        process.environment = ProcessInfo.processInfo.environment
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -344,20 +467,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
     }
 
-    private func runShellCommand(_ command: String, extraEnvironment: [String: String] = [:], completion: ((Int32) -> Void)? = nil) {
+    private func runShellCommand(_ command: String, completion: ((Int32) -> Void)? = nil) {
         guard activeTask == nil else {
             updateStatus("別の処理が進行中です。終わるまで待ってください。")
             return
         }
 
         let process = Process()
-        process.currentDirectoryURL = projectDir
+        process.currentDirectoryURL = currentProjectDir
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-lc", command]
-
-        var environment = ProcessInfo.processInfo.environment
-        extraEnvironment.forEach { environment[$0.key] = $0.value }
-        process.environment = environment
+        process.environment = ProcessInfo.processInfo.environment
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -402,67 +522,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             return
         }
 
-        guard isSetupComplete() else {
-            let alert = NSAlert()
-            alert.messageText = "まだセットアップされていません"
-            alert.informativeText = "最初に『初回セットアップ』を実行してください。"
-            alert.alertStyle = .warning
-            alert.runModal()
-            return
-        }
+        let launch = { [weak self] in
+            guard let self else { return }
+            guard self.isSetupComplete() else {
+                let alert = NSAlert()
+                alert.messageText = "まだセットアップされていません"
+                alert.informativeText = "最初に『初回セットアップ』を実行してください。"
+                alert.alertStyle = .warning
+                alert.runModal()
+                return
+            }
 
-        let process = Process()
-        process.currentDirectoryURL = projectDir
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = [projectFile("run.command").path]
+            let process = Process()
+            process.currentDirectoryURL = self.currentProjectDir
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = [self.projectFile("run.command").path]
 
-        var environment = ProcessInfo.processInfo.environment
-        environment["QWEN_TTS_NO_OPEN_BROWSER"] = "1"
-        environment["QWEN_TTS_PORT"] = backendPort
-        process.environment = environment
+            var environment = ProcessInfo.processInfo.environment
+            environment["QWEN_TTS_NO_OPEN_BROWSER"] = "1"
+            environment["QWEN_TTS_PORT"] = self.backendPort
+            process.environment = environment
 
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        backendStdout = stdout
-        backendStderr = stderr
+            let stdout = Pipe()
+            let stderr = Pipe()
+            process.standardOutput = stdout
+            process.standardError = stderr
+            self.backendStdout = stdout
+            self.backendStderr = stderr
 
-        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            self?.appendLog(text.trimmingCharacters(in: .newlines))
-        }
-        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            self?.appendLog(text.trimmingCharacters(in: .newlines))
-        }
+            stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                self?.appendLog(text.trimmingCharacters(in: .newlines))
+            }
+            stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                self?.appendLog(text.trimmingCharacters(in: .newlines))
+            }
 
-        process.terminationHandler = { [weak self] task in
-            DispatchQueue.main.async {
-                self?.backendStdout?.fileHandleForReading.readabilityHandler = nil
-                self?.backendStderr?.fileHandleForReading.readabilityHandler = nil
-                self?.backendProcess = nil
-                self?.backendStdout = nil
-                self?.backendStderr = nil
-                self?.setBusy(false)
-                self?.updateStatus("アプリ本体が停止しました。もう一度『起動』を押すと再開できます。")
-                self?.appendLog("バックエンドが終了しました。終了コード: \(task.terminationStatus)")
+            process.terminationHandler = { [weak self] task in
+                DispatchQueue.main.async {
+                    self?.backendStdout?.fileHandleForReading.readabilityHandler = nil
+                    self?.backendStderr?.fileHandleForReading.readabilityHandler = nil
+                    self?.backendProcess = nil
+                    self?.backendStdout = nil
+                    self?.backendStderr = nil
+                    self?.setBusy(false)
+                    self?.updateStatus("アプリ本体が停止しました。もう一度『起動』を押すと再開できます。")
+                    self?.appendLog("バックエンドが終了しました。終了コード: \(task.terminationStatus)")
+                }
+            }
+
+            do {
+                self.setBusy(true)
+                self.updateStatus("起動準備中です。アプリ本体が立ち上がるまで少し待ってください。")
+                self.appendLog("バックエンドを起動します。")
+                try process.run()
+                self.backendProcess = process
+                self.waitForBackendAndLoad()
+            } catch {
+                self.setBusy(false)
+                self.updateStatus("起動に失敗しました: \(error.localizedDescription)")
             }
         }
 
-        do {
-            setBusy(true)
-            updateStatus("起動準備中です。アプリ本体が立ち上がるまで少し待ってください。")
-            appendLog("バックエンドを起動します。")
-            try process.run()
-            backendProcess = process
-            waitForBackendAndLoad()
-        } catch {
-            setBusy(false)
-            updateStatus("起動に失敗しました: \(error.localizedDescription)")
+        if usesBundledRuntime && !runtimeLooksInstalled() {
+            ensureBundledRuntimeInstalled { success in
+                if success {
+                    launch()
+                }
+            }
+            return
         }
+
+        launch()
     }
 
     private func waitForBackendAndLoad() {
@@ -510,6 +644,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     @objc private func handleSetup() {
+        if usesBundledRuntime {
+            ensureBundledRuntimeInstalled { _ in }
+            return
+        }
+
         updateStatus("初回セットアップを始めます。数分かかることがあります。")
         appendLog("初回セットアップを開始します。")
         runShellScript("setup.command") { [weak self] code in
@@ -517,14 +656,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 self?.updateStatus("初回セットアップが終わりました。次は『起動』を押してください。")
             } else {
                 self?.updateStatus("初回セットアップに失敗しました。ログを確認してください。")
-                if let self, !self.isSetupComplete() {
-                    self.openURL(self.pythonDownloadURL)
-                }
             }
         }
     }
 
     @objc private func handleUpdate() {
+        if usesBundledRuntime {
+            updateStatus("内蔵アプリ版ではアプリ内更新は使えません。最新リリースを開きます。")
+            openURL(releasesURL)
+            return
+        }
+
         guard projectHasGit() else {
             updateStatus("配布版ではアプリ内更新は使えません。Releases を開きます。")
             openURL(releasesURL)
@@ -542,19 +684,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     @objc private func handleInstallASR() {
-        guard isSetupComplete() else {
-            updateStatus("先に『初回セットアップ』を実行してください。")
-            return
-        }
-        updateStatus("ローカル文字起こしを追加します。")
-        appendLog("ローカル文字起こしの導入を開始します。")
-        runShellScript("install_local_asr.command") { [weak self] code in
-            if code == 0 {
-                self?.updateStatus("ローカル文字起こしの追加が終わりました。")
-            } else {
-                self?.updateStatus("ローカル文字起こしの追加に失敗しました。ログを確認してください。")
+        let install = { [weak self] in
+            guard let self else { return }
+            guard self.isSetupComplete() else {
+                self.updateStatus("先に『初回セットアップ』を実行してください。")
+                return
+            }
+            self.updateStatus("ローカル文字起こしを追加します。")
+            self.appendLog("ローカル文字起こしの導入を開始します。")
+            self.runShellScript("install_local_asr.command") { [weak self] code in
+                if code == 0 {
+                    self?.updateStatus("ローカル文字起こしの追加が終わりました。")
+                } else {
+                    self?.updateStatus("ローカル文字起こしの追加に失敗しました。ログを確認してください。")
+                }
             }
         }
+
+        if usesBundledRuntime && !runtimeLooksInstalled() {
+            ensureBundledRuntimeInstalled { success in
+                if success {
+                    install()
+                }
+            }
+            return
+        }
+
+        install()
     }
 
     @objc private func handleHelp() {
