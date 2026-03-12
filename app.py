@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,12 +11,16 @@ from typing import Optional
 import gradio as gr
 import soundfile as sf
 import torch
+from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
 from qwen_tts import Qwen3TTSModel
 
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 DEFAULT_LANGUAGE = "Japanese"
 DEFAULT_OUTPUT_DIR = Path("outputs")
+DEFAULT_REFERENCE_DIR = DEFAULT_OUTPUT_DIR / "references"
+DEFAULT_GENERATED_DIR = DEFAULT_OUTPUT_DIR / "generated"
 
 
 @dataclass
@@ -53,7 +59,7 @@ def load_model() -> Qwen3TTSModel:
 
 def validate_inputs(reference_audio: Optional[str], reference_text: str, target_text: str) -> Optional[str]:
     if not reference_audio:
-        return "参照音声をアップロードしてください。"
+        return "参照音声または参照動画をアップロードしてください。"
     if not reference_text.strip():
         return "参照音声で実際に話している内容を、参照テキストに入力してください。"
     if not target_text.strip():
@@ -62,23 +68,156 @@ def validate_inputs(reference_audio: Optional[str], reference_text: str, target_
 
 
 def save_output_audio(waveform, sample_rate: int) -> str:
-    APP_CONFIG.output_dir.mkdir(parents=True, exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix="qwen-tts-jp-", suffix=".wav", dir=APP_CONFIG.output_dir)
+    DEFAULT_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix="qwen-tts-jp-", suffix=".wav", dir=DEFAULT_GENERATED_DIR)
     os.close(fd)
     sf.write(temp_path, waveform, sample_rate)
     return temp_path
 
 
-def generate_voice_clone(reference_audio: Optional[str], reference_text: str, target_text: str) -> tuple[str, Optional[str]]:
-    error = validate_inputs(reference_audio, reference_text, target_text)
+def save_reference_audio(audio: AudioSegment) -> str:
+    DEFAULT_REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix="qwen-tts-ref-", suffix=".wav", dir=DEFAULT_REFERENCE_DIR)
+    os.close(fd)
+    audio.export(temp_path, format="wav")
+    return temp_path
+
+
+def ensure_ffmpeg() -> None:
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError(
+            "動画から音声を取り出すには ffmpeg が必要です。Homebrew を使うなら `brew install ffmpeg` を実行してください。"
+        )
+
+
+def extract_audio_from_video(video_path: str) -> str:
+    ensure_ffmpeg()
+    DEFAULT_REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+    fd, audio_path = tempfile.mkstemp(prefix="qwen-tts-video-", suffix=".wav", dir=DEFAULT_REFERENCE_DIR)
+    os.close(fd)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_path,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "24000",
+        audio_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError("動画から音声を取り出せませんでした。別の動画ファイルで試してください。")
+    return audio_path
+
+
+def auto_trim_audio(audio: AudioSegment) -> AudioSegment:
+    if len(audio) == 0:
+        return audio
+
+    silence_threshold = audio.dBFS - 16 if audio.dBFS != float("-inf") else -50
+    silence_threshold = max(silence_threshold, -50)
+    regions = detect_nonsilent(audio, min_silence_len=200, silence_thresh=silence_threshold)
+    if not regions:
+        return audio
+
+    start_ms = regions[0][0]
+    end_ms = regions[-1][1]
+    return audio[start_ms:end_ms]
+
+
+def build_reference_audio(
+    reference_audio: Optional[str],
+    reference_video: Optional[str],
+    trim_start_sec: float,
+    trim_end_sec: float,
+    auto_trim_silence: bool,
+) -> tuple[str, str]:
+    if reference_audio:
+        source_path = reference_audio
+        source_label = "アップロード音声"
+    elif reference_video:
+        source_path = extract_audio_from_video(reference_video)
+        source_label = "アップロード動画"
+    else:
+        raise ValueError("参照音声または参照動画をアップロードしてください。")
+
+    audio = AudioSegment.from_file(source_path)
+    start_ms = max(0, int(trim_start_sec * 1000))
+    end_ms = int(trim_end_sec * 1000) if trim_end_sec > 0 else len(audio)
+    end_ms = min(end_ms, len(audio))
+    if start_ms >= end_ms:
+        raise ValueError("切り出し範囲が不正です。開始秒と終了秒を見直してください。")
+
+    prepared = audio[start_ms:end_ms]
+    if auto_trim_silence:
+        prepared = auto_trim_audio(prepared)
+
+    if len(prepared) == 0:
+        raise ValueError("切り出した結果が空になりました。切り出し範囲を見直してください。")
+
+    output_path = save_reference_audio(prepared)
+    duration_sec = len(prepared) / 1000
+    status = f"参照素材を整えました。元の入力: {source_label} / 長さ: {duration_sec:.1f}秒"
+    return status, output_path
+
+
+def prepare_reference_audio(
+    reference_audio: Optional[str],
+    reference_video: Optional[str],
+    trim_start_sec: float,
+    trim_end_sec: float,
+    auto_trim_silence: bool,
+) -> tuple[str, Optional[str], Optional[str]]:
+    try:
+        status, output_path = build_reference_audio(
+            reference_audio=reference_audio,
+            reference_video=reference_video,
+            trim_start_sec=trim_start_sec,
+            trim_end_sec=trim_end_sec,
+            auto_trim_silence=auto_trim_silence,
+        )
+    except Exception as exc:
+        return f"参照素材の準備に失敗しました: {exc}", None, None
+
+    return status, output_path, output_path
+
+
+def generate_voice_clone(
+    reference_audio: Optional[str],
+    reference_video: Optional[str],
+    prepared_reference_audio: Optional[str],
+    reference_text: str,
+    target_text: str,
+    trim_start_sec: float,
+    trim_end_sec: float,
+    auto_trim_silence: bool,
+) -> tuple[str, Optional[str], Optional[str]]:
+    if prepared_reference_audio:
+        resolved_reference_audio = prepared_reference_audio
+    else:
+        try:
+            _, resolved_reference_audio = build_reference_audio(
+                reference_audio=reference_audio,
+                reference_video=reference_video,
+                trim_start_sec=trim_start_sec,
+                trim_end_sec=trim_end_sec,
+                auto_trim_silence=auto_trim_silence,
+            )
+        except Exception as exc:
+            return f"参照素材の準備に失敗しました: {exc}", None, None
+
+    error = validate_inputs(resolved_reference_audio, reference_text, target_text)
     if error:
-        return error, None
+        return error, prepared_reference_audio, None
 
     model = load_model()
     wavs, sample_rate = model.generate_voice_clone(
         text=target_text.strip(),
         language=DEFAULT_LANGUAGE,
-        ref_audio=reference_audio,
+        ref_audio=resolved_reference_audio,
         ref_text=reference_text.strip(),
         non_streaming_mode=True,
     )
@@ -86,7 +225,7 @@ def generate_voice_clone(reference_audio: Optional[str], reference_text: str, ta
     message = (
         "生成できました。下のプレイヤーで確認して、必要なら wav ファイルとして保存してください。"
     )
-    return message, output_path
+    return message, resolved_reference_audio, output_path
 
 
 CSS = """
@@ -140,7 +279,7 @@ def build_app() -> gr.Blocks:
                   <h1>かんたんボイスクローン</h1>
                   <p>Qwen-TTS を日本語でわかりやすく使うための、初心者向けローカルアプリです。</p>
                   <ol>
-                    <li>3秒以上の参照音声を入れる</li>
+                    <li>音声または動画を入れて、必要なら切り出す</li>
                     <li>その音声の文字起こしを正確に入力する</li>
                     <li>読ませたい文章を入れて生成する</li>
                   </ol>
@@ -149,17 +288,30 @@ def build_app() -> gr.Blocks:
                 """
             )
 
+            prepared_reference_state = gr.State(value=None)
+
             with gr.Row():
                 reference_audio = gr.Audio(
                     type="filepath",
                     label="1. 参照音声",
                     sources=["upload", "microphone"],
                 )
-                output_audio = gr.Audio(
-                    type="filepath",
-                    label="4. 生成結果",
-                    interactive=False,
+                reference_video = gr.Video(
+                    label="参考用の動画でもOK",
+                    sources=["upload"],
+                    include_audio=True,
                 )
+
+            with gr.Row():
+                trim_start_sec = gr.Number(label="切り出し開始秒", value=0, minimum=0, precision=1)
+                trim_end_sec = gr.Number(label="切り出し終了秒", value=0, minimum=0, precision=1)
+                auto_trim_silence = gr.Checkbox(label="前後の無音を自動でカット", value=True)
+
+            prepared_reference_audio = gr.Audio(
+                type="filepath",
+                label="整えた参照音声",
+                interactive=False,
+            )
 
             reference_text = gr.Textbox(
                 label="2. 参照音声の文字起こし",
@@ -174,19 +326,43 @@ def build_app() -> gr.Blocks:
             )
 
             status = gr.Markdown(
-                "「音声生成」を押すと、初回はモデルの読み込みに少し時間がかかります。"
+                "先に「参照素材を整える」で切り出し結果を確認できます。初回の音声生成はモデルの読み込みに少し時間がかかります。"
             )
 
+            output_audio = gr.Audio(
+                type="filepath",
+                label="4. 生成結果",
+                interactive=False,
+            )
+
+            prepare_button = gr.Button("参照素材を整える")
             generate_button = gr.Button("音声生成", variant="primary")
+
+            prepare_button.click(
+                fn=prepare_reference_audio,
+                inputs=[reference_audio, reference_video, trim_start_sec, trim_end_sec, auto_trim_silence],
+                outputs=[status, prepared_reference_audio, prepared_reference_state],
+            )
             generate_button.click(
                 fn=generate_voice_clone,
-                inputs=[reference_audio, reference_text, target_text],
-                outputs=[status, output_audio],
+                inputs=[
+                    reference_audio,
+                    reference_video,
+                    prepared_reference_state,
+                    reference_text,
+                    target_text,
+                    trim_start_sec,
+                    trim_end_sec,
+                    auto_trim_silence,
+                ],
+                outputs=[status, prepared_reference_audio, output_audio],
             )
 
             gr.Markdown(
                 """
                 ### うまくいかないとき
+                - 動画を入れた場合は、音声を自動で取り出して参照音声に変換します。
+                - 先に「参照素材を整える」を押すと、切り出し結果を確認できます。
                 - 声が不安定なときは、雑音の少ない3秒以上の音声を使ってください。精度を上げたいなら30秒前後も有効です。
                 - 参照テキストは、省略せずに実際の音声どおり入力してください。
                 - 最初は短い文で試すと成功しやすいです。
